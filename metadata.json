@@ -1,0 +1,6 @@
+{
+  "name": "Retailer Brand Presence Dashboard",
+  "description": "A React application to display and analyze retailer brand presence data, including board types, POSM (Point of Sale Materials), locations, and images.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
