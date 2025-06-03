@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { XMarkIcon } from '../shared/Icons'; // Updated import path
+import { XMarkIcon } from './Icons'; // Updated import path
 
 interface ImageModalProps {
   isOpen: boolean;

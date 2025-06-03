@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { ViewMode, Page } from '../../types';
-import { Theme } from '../../App'; // Assuming Theme type is exported from App.tsx
+import { Theme } from '../../frontend-retail-dashboard/App'; // Assuming Theme type is exported from App.tsx
 import ViewModeToggle from '../sidebar/ViewModeToggle';
 import NavigationMenu from '../sidebar/NavigationMenu';
 import { SunIcon, MoonIcon } from '../shared/Icons'; // Import icons from the new central file

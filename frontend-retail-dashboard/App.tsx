@@ -6,7 +6,7 @@ import MainContent from './components/layout/MainContent';
 import BoardView from './pages/BoardView';
 import PosmView from './pages/PosmView';
 import ManagementView from './pages/ManagementView';
-import { ViewMode, Page } from './types';
+import { ViewMode, Page } from 'types';
 
 export type Theme = 'light' | 'dark';
 
