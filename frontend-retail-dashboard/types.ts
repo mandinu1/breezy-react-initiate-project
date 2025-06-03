@@ -58,23 +58,33 @@ export interface BoardData {
 }
 
 export interface PosmData {
-  id: string;                   // Unique ID for the POSM entry (e.g., from IMAGE_REF_ID)
+  id: string;                   // Unique ID for the POSM entry
   retailerId: string;           // Corresponds to PROFILE_ID
-  provider: string;             // Primary provider determined for this POSM entry by the backend
-  visibilityPercentage: number; // Overall/main visibility percentage for this POSM entry
+  
+  // Fields to be REMOVED from display as per your request:
+  // provider: string;          // This was "Main Provider"
+  // visibilityPercentage: number; // This was "Overall Visibility %"
 
-  // New percentage columns from your data source (posm.csv via backend)
+  // Existing percentage columns (these are fine)
   DIALOG_AREA_PERCENTAGE?: number;
   AIRTEL_AREA_PERCENTAGE?: number;
   MOBITEL_AREA_PERCENTAGE?: number;
   HUTCH_AREA_PERCENTAGE?: number;
 
-  // Optional: Add other fields from posm.csv if you want them in the table
-  // and if your backend includes them in the PosmData objects
-  PROFILE_NAME?: string;        // Retailer's name
+  // Fields to ADD to display as per your request:
+  PROFILE_NAME?: string;
   PROVINCE?: string;
   DISTRICT?: string;
-  // ... any other fields from posm.csv you want to access on this object
+  DS_DIVISION?: string;
+  GN_DIVISION?: string;
+  SALES_REGION?: string;
+  SALES_DISTRICT?: string;
+  SALES_AREA?: string;      // Make sure this column exists in your posm.csv and is sent by backend
+
+  // Retain these for other potential uses, even if not in table
+  provider?: string; // Still useful for filtering or other logic
+  visibilityPercentage?: number; // Still useful for filtering or other logic
+
 
   [key: string]: any; // For flexibility if backend sends more fields not strictly typed here
 }
