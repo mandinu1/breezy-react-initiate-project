@@ -18,20 +18,65 @@ export interface Retailer {
   district?: string; // Optional: for filtering
 }
 
+// mandinu1/breezy-react-initiate-project/breezy-react-initiate-project-653165f7b5ee7d64c670d05e8777412d3daa000e/types.ts
 export interface BoardData {
-  id: string;
-  retailerId: string;
-  boardType: string;
-  provider: string;
-  // ... other board specific data
+  id: string;                   // Unique ID for the board entry (e.g., IMAGE_REF_ID)
+  retailerId: string;           // Corresponds to PROFILE_ID
+  
+  PROFILE_ID?: string;          // Raw data from source
+  PROFILE_NAME?: string;
+  PROVINCE?: string;
+  DISTRICT?: string;
+  DS_DIVISION?: string;
+  GN_DIVISION?: string;
+  SALES_DISTRICT?: string;
+  SALES_AREA?: string;          // Make sure this column exists in your board.csv
+  SALES_REGION?: string;
+
+  // Board type and provider determined by backend logic
+  boardType: string; 
+  provider: string;  
+
+  DIALOG_NAME_BOARD?: number;
+  MOBITEL_NAME_BOARD?: number;
+  HUTCH_NAME_BOARD?: number;
+  AIRTEL_NAME_BOARD?: number;
+  DIALOG_SIDE_BOARD?: number;
+  MOBITEL_SIDE_BOARD?: number;
+  HUTCH_SIDE_BOARD?: number;
+  AIRTEL_SIDE_BOARD?: number;
+  DIALOG_TIN_BOARD?: number;
+  MOBITEL_TIN_BOARD?: number;
+  HUTCH_TIN_BOARD?: number;
+  AIRTEL_TIN_BOARD?: number;
+
+  // For Dual Image Display (if you plan to use specific board images)
+  originalBoardImageIdentifier?: string; 
+  detectedBoardImageIdentifier?: string; 
+  
+  [key: string]: any; // Allows any other properties if needed for full flexibility
 }
 
 export interface PosmData {
-  id: string;
-  retailerId: string;
-  provider: string;
-  visibilityPercentage: number;
-  // ... other POSM specific data
+  id: string;                   // Unique ID for the POSM entry (e.g., from IMAGE_REF_ID)
+  retailerId: string;           // Corresponds to PROFILE_ID
+  provider: string;             // Primary provider determined for this POSM entry by the backend
+  visibilityPercentage: number; // Overall/main visibility percentage for this POSM entry
+
+  // New percentage columns from your data source (posm.csv via backend)
+  DIALOG_AREA_PERCENTAGE?: number;
+  AIRTEL_AREA_PERCENTAGE?: number;
+  MOBITEL_AREA_PERCENTAGE?: number;
+  HUTCH_AREA_PERCENTAGE?: number;
+
+  // Optional: Add other fields from posm.csv if you want them in the table
+  // and if your backend includes them in the PosmData objects
+  PROFILE_NAME?: string;        // Retailer's name
+  PROVINCE?: string;
+  DISTRICT?: string;
+  // ... any other fields from posm.csv you want to access on this object
+
+  [key: string]: any; // For flexibility if backend sends more fields not strictly typed here
 }
 
 export interface ProviderConfig {

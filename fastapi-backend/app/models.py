@@ -1,3 +1,4 @@
+# fastapi-backend/app/models.py
 from pydantic import BaseModel, Field
 from typing import List, Optional, Tuple, Any, Dict
 
@@ -15,10 +16,44 @@ class Retailer(BaseModel):
     district: Optional[str] = None
 
 class BoardData(BaseModel):
-    id: str
-    retailerId: str
+    # Core derived/key fields
+    id: str                   # Unique ID for the board entry (e.g., from IMAGE_REF_ID)
+    retailerId: str           # Corresponds to PROFILE_ID
+
+    # Raw data fields from your data source (board.csv)
+    PROFILE_ID: Optional[str] = None
+    PROFILE_NAME: Optional[str] = None
+    PROVINCE: Optional[str] = None
+    DISTRICT: Optional[str] = None
+    DS_DIVISION: Optional[str] = None
+    GN_DIVISION: Optional[str] = None
+    SALES_DISTRICT: Optional[str] = None
+    SALES_AREA: Optional[str] = None # Ensure this column exists in your board.csv
+    SALES_REGION: Optional[str] = None
+
+    # Board type and provider determined by backend logic
     boardType: str
     provider: str
+
+    # Board counts
+    DIALOG_NAME_BOARD: Optional[int] = None
+    MOBITEL_NAME_BOARD: Optional[int] = None
+    HUTCH_NAME_BOARD: Optional[int] = None
+    AIRTEL_NAME_BOARD: Optional[int] = None
+    DIALOG_SIDE_BOARD: Optional[int] = None
+    MOBITEL_SIDE_BOARD: Optional[int] = None
+    HUTCH_SIDE_BOARD: Optional[int] = None
+    AIRTEL_SIDE_BOARD: Optional[int] = None
+    DIALOG_TIN_BOARD: Optional[int] = None
+    MOBITEL_TIN_BOARD: Optional[int] = None
+    HUTCH_TIN_BOARD: Optional[int] = None
+    AIRTEL_TIN_BOARD: Optional[int] = None
+    
+    # For Dual Image Display in BoardView
+    # S3_ARN from board.csv can be the original image of the *board capture*
+    originalBoardImageIdentifier: Optional[str] = None 
+    # This would be the specific inference ARN, e.g., NAME_BOARD_INF_S3_ARN
+    detectedBoardImageIdentifier: Optional[str] = None 
 
 class ProviderMetric(BaseModel):
     provider: str
@@ -34,16 +69,38 @@ class FetchBoardsResponse(BaseModel):
 class BoardFiltersState(BaseModel):
     boardType: Optional[str] = None
     provider: Optional[str] = None
-    salesRegion: Optional[str] = None # province
-    salesDistrict: Optional[str] = None # district
+    salesRegion: Optional[str] = None
+    salesDistrict: Optional[str] = None
     dsDivision: Optional[str] = None
     retailerId: Optional[str] = None
 
 class PosmData(BaseModel):
-    id: str
-    retailerId: str
+    # Core derived/key fields
+    id: str                   # Unique ID for the POSM entry (e.g., from IMAGE_REF_ID)
+    retailerId: str           # Corresponds to PROFILE_ID
+    
+    # Main provider & visibility for this specific POSM entry
     provider: str
-    visibilityPercentage: float
+    visibilityPercentage: float 
+
+    # Raw data fields from your data source (posm.csv)
+    PROFILE_NAME: Optional[str] = None
+    PROVINCE: Optional[str] = None
+    DISTRICT: Optional[str] = None
+    # Add other relevant fields from posm.csv that you want to pass to frontend:
+    # DS_DIVISION: Optional[str] = None 
+    # SALES_DISTRICT: Optional[str] = None
+    # SALES_REGION: Optional[str] = None
+
+    # Provider-specific area percentages
+    DIALOG_AREA_PERCENTAGE: Optional[float] = None
+    AIRTEL_AREA_PERCENTAGE: Optional[float] = None
+    MOBITEL_AREA_PERCENTAGE: Optional[float] = None
+    HUTCH_AREA_PERCENTAGE: Optional[float] = None
+    
+    # For images related to this POSM entry (if needed for a POSM-specific image display)
+    originalPosmImageIdentifier: Optional[str] = None # e.g., S3_ARN from posm.csv
+    detectedPosmImageIdentifier: Optional[str] = None # e.g., INF_S3_ARN from posm.csv
 
 class FetchPosmGeneralResponse(BaseModel):
     data: List[PosmData]
@@ -62,7 +119,7 @@ class PosmGeneralFiltersState(BaseModel):
 class GeoJsonFeatureProperties(BaseModel):
     name: str
     value: Optional[float] = None
-    ISO_1: Optional[str] = None # Example property from api.ts mock
+    ISO_1: Optional[str] = None
 
 class GeoJsonGeometry(BaseModel):
     type: str
@@ -70,7 +127,7 @@ class GeoJsonGeometry(BaseModel):
 
 class GeoJsonFeature(BaseModel):
     type: str = "Feature"
-    properties: Dict[str, Any] # Keeping it flexible based on api.ts mock
+    properties: Dict[str, Any]
     geometry: GeoJsonGeometry
 
 class GeoJsonCollection(BaseModel):
@@ -80,18 +137,18 @@ class GeoJsonCollection(BaseModel):
 class ImageInfo(BaseModel):
     id: str
     url: str
-    type: str # 'original' | 'detected'
+    type: str # 'original' | 'detected' (or others as defined by your backend logic)
 
 class PosmBatchShare(BaseModel):
     provider: str
     percentage: float
 
 class PosmBatchDetails(BaseModel):
-    image: str
+    image: str # URL
     shares: List[PosmBatchShare]
     maxCapturePhase: Optional[str] = None
 
 class PosmComparisonData(BaseModel):
     batch1: PosmBatchDetails
     batch2: PosmBatchDetails
-    differences: List[Dict[str, Any]] # provider: str, diff: float
+    differences: List[Dict[str, Any]]

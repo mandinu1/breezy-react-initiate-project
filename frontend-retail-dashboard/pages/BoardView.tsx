@@ -1,5 +1,4 @@
-// mandinu1/breezy-react-initiate-project/breezy-react-initiate-project-653165f7b5ee7d64c670d05e8777412d3daa000e/pages/BoardView.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ViewMode, BoardFiltersState, BoardData, ProviderMetric, Retailer, FilterOption } from '../types';
 import FilterPanel from '../components/sidebar/FilterPanel';
 import SelectDropdown from '../components/shared/SelectDropdown';
@@ -9,24 +8,22 @@ import DataTable from '../components/data/DataTable';
 import MetricBox from '../components/metrics/MetricBox';
 import LoadingSpinner from '../components/shared/LoadingSpinner';
 import ErrorMessage from '../components/shared/ErrorMessage';
-// Import the DualImageDisplay (assuming ImageDisplay.tsx was updated as previously discussed)
-import DualImageDisplay from '../components/image/ImageDisplay'; 
-// import ImageModal from '../components/shared/ImageModal'; // Modal logic will be simplified/removed for now
+import DualImageDisplay from '../components/image/ImageDisplay'; // Assuming ImageDisplay.tsx now exports DualImageDisplay
 import Button from '../components/shared/Button';
-import { UsersIcon, /* EyeIcon, */ DownloadIcon } from '../components/shared/Icons'; // EyeIcon might be removed if modal changes
+import { UsersIcon, DownloadIcon } from '../components/shared/Icons';
 
 import { 
     fetchBoards, 
     fetchRetailers,
     fetchProvinces,
     fetchDistricts,
-    fetchDsDivisions // Assuming you create this in services/api.ts and its backend endpoint
+    fetchDsDivisions 
 } from '../services/api';
 import { 
     BOARD_TYPES, 
-    PROVIDER_FILTER_OPTIONS, // These can remain if they are truly static
+    PROVIDER_FILTER_OPTIONS, 
     PROVIDERS_CONFIG,
-} from '../constants'; // Only truly static constants should remain here long-term
+} from '../constants';
 
 interface BoardViewProps {
   viewMode: ViewMode;
@@ -34,19 +31,40 @@ interface BoardViewProps {
 }
 
 const initialFilters: BoardFiltersState = {
-  boardType: BOARD_TYPES[0]?.value || '', // Default to first board type
+  boardType: BOARD_TYPES[0]?.value || '',
   provider: 'all',
-  salesRegion: 'all', // Will correspond to province value
+  salesRegion: 'all',
   salesDistrict: 'all',
   dsDivision: 'all',
   retailerId: 'all',
 };
 
-const columnsForDataTable = [
-    { Header: 'ID', accessor: 'id' },
-    { Header: 'Retailer ID', accessor: 'retailerId' },
-    { Header: 'Board Type', accessor: 'boardType' }, // This should be populated by backend
-    { Header: 'Provider', accessor: 'provider' },   // This should be populated by backend
+// Define columns for the BoardView DataTable based on your data source fields and desired order
+const columnsForBoardView = [
+  { Header: 'Entry ID', accessor: 'id' },
+  { Header: 'Profile ID', accessor: 'PROFILE_ID' },
+  { Header: 'Profile Name', accessor: 'PROFILE_NAME' },
+  { Header: 'Determined Board Type', accessor: 'boardType' },
+  { Header: 'Determined Provider', accessor: 'provider' },
+  { Header: 'Province', accessor: 'PROVINCE' },
+  { Header: 'District', accessor: 'DISTRICT' },
+  { Header: 'DS Division', accessor: 'DS_DIVISION' },
+  { Header: 'GN Division', accessor: 'GN_DIVISION' },
+  { Header: 'Sales Region', accessor: 'SALES_REGION' },
+  { Header: 'Sales District', accessor: 'SALES_DISTRICT' },
+  { Header: 'Sales Area', accessor: 'SALES_AREA' },
+  { Header: 'Dialog Name Board', accessor: 'DIALOG_NAME_BOARD' },
+  { Header: 'Mobitel Name Board', accessor: 'MOBITEL_NAME_BOARD' },
+  { Header: 'Hutch Name Board', accessor: 'HUTCH_NAME_BOARD' },
+  { Header: 'Airtel Name Board', accessor: 'AIRTEL_NAME_BOARD' },
+  { Header: 'Dialog Side Board', accessor: 'DIALOG_SIDE_BOARD' },
+  { Header: 'Mobitel Side Board', accessor: 'MOBITEL_SIDE_BOARD' },
+  { Header: 'Hutch Side Board', accessor: 'HUTCH_SIDE_BOARD' },
+  { Header: 'Airtel Side Board', accessor: 'AIRTEL_SIDE_BOARD' },
+  { Header: 'Dialog Tin Board', accessor: 'DIALOG_TIN_BOARD' },
+  { Header: 'Mobitel Tin Board', accessor: 'MOBITEL_TIN_BOARD' },
+  { Header: 'Hutch Tin Board', accessor: 'HUTCH_TIN_BOARD' },
+  { Header: 'Airtel Tin Board', accessor: 'AIRTEL_TIN_BOARD' },
 ];
 
 const convertToCSV = (data: any[], columns: { Header: string, accessor: string }[]): string => {
@@ -82,18 +100,16 @@ const downloadCSV = (csvString: string, filename: string) => {
 
 const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) => {
   const [filters, setFilters] = useState<BoardFiltersState>(initialFilters);
-  const [boardData, setBoardData] = useState<BoardData[]>([]); // Expect BoardData to potentially include image ARNs
+  const [boardData, setBoardData] = useState<BoardData[]>([]);
   const [retailerDataCount, setRetailerDataCount] = useState<number>(0);
   const [mapRetailers, setMapRetailers] = useState<Retailer[]>([]);
   const [providerMetrics, setProviderMetrics] = useState<ProviderMetric[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   
-  // For DualImageDisplay
   const [selectedRetailerForOriginalImage, setSelectedRetailerForOriginalImage] = useState<Retailer | null>(null);
   const [detectedBoardImageIdentifier, setDetectedBoardImageIdentifier] = useState<string | undefined>(undefined);
 
-  // Dynamic filter options states
   const [provinceOptions, setProvinceOptions] = useState<FilterOption[]>([{ value: 'all', label: 'Loading...' }]);
   const [districtOptions, setDistrictOptions] = useState<FilterOption[]>([{ value: 'all', label: 'Select Province' }]);
   const [dsDivisionOptions, setDsDivisionOptions] = useState<FilterOption[]>([{ value: 'all', label: 'Select District' }]);
@@ -102,32 +118,29 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
   const handleFilterChange = useCallback((filterName: keyof BoardFiltersState, value: string) => {
     setFilters(prev => {
         const newFilters = { ...prev, [filterName]: value };
-        // Reset dependent filters if a parent filter changes to 'all' or changes value
         if (filterName === 'salesRegion') {
             newFilters.salesDistrict = 'all';
             newFilters.dsDivision = 'all';
-            newFilters.retailerId = 'all'; // Optional: Reset retailer if region changes
+            newFilters.retailerId = 'all';
         } else if (filterName === 'salesDistrict') {
             newFilters.dsDivision = 'all';
-            newFilters.retailerId = 'all'; // Optional: Reset retailer if district changes
+            newFilters.retailerId = 'all';
         } else if (filterName === 'dsDivision') {
-             newFilters.retailerId = 'all'; // Optional
+             newFilters.retailerId = 'all';
         }
         return newFilters;
     });
   }, []); 
   
-  // Fetch initial dynamic filter options
   useEffect(() => {
     fetchProvinces().then(setProvinceOptions);
-    // Fetch initial retailers (all, or based on default 'all' filters)
-    fetchRetailers({ province: 'all', district: 'all', dsDivision: 'all' }).then(data => {
+    const initialGeoFilters = { province: 'all', district: 'all', dsDivision: 'all' };
+    fetchRetailers(initialGeoFilters).then(data => {
         const options = data.map(r => ({ value: r.id, label: `${r.name} (${r.district || r.province || 'N/A'})` }));
         setRetailerFilterOptions([{ value: 'all', label: 'All Retailers' }, ...options]);
     });
   }, []);
 
-  // Fetch districts when province (salesRegion) filter changes
   useEffect(() => {
     const currentProvince = filters.salesRegion;
     if (currentProvince && currentProvince !== 'all') {
@@ -138,46 +151,45 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
     }
   }, [filters.salesRegion]);
 
-  // Fetch DS divisions when district (salesDistrict) filter changes
   useEffect(() => {
     const currentDistrict = filters.salesDistrict;
     if (currentDistrict && currentDistrict !== 'all') {
       setDsDivisionOptions([{ value: 'all', label: 'Loading...' }]);
-      // Assuming you create fetchDsDivisions in services/api.ts and a backend endpoint
-      fetchDsDivisions(currentDistrict).then(setDsDivisionOptions);
+      fetchDsDivisions(currentDistrict).then(setDsDivisionOptions); // Ensure fetchDsDivisions exists in api.ts
     } else {
       setDsDivisionOptions([{ value: 'all', label: 'Select District' }]);
     }
   }, [filters.salesDistrict]);
 
-  // Re-fetch retailer options if major geo filters change
    useEffect(() => {
-    setRetailerFilterOptions([{ value: 'all', label: 'Loading Retailers...' }]);
     const geoFilters = {
         province: filters.salesRegion === 'all' ? undefined : filters.salesRegion,
         district: filters.salesDistrict === 'all' ? undefined : filters.salesDistrict,
         dsDivision: filters.dsDivision === 'all' ? undefined : filters.dsDivision,
     };
-    fetchRetailers(geoFilters).then(data => {
-        const options = data.map(r => ({ value: r.id, label: `${r.name} (${r.district || r.province || 'N/A'})` }));
-        setRetailerFilterOptions([{value: 'all', label: 'All Retailers'}, ...options]);
-    });
+    if (filters.salesRegion !== initialFilters.salesRegion || 
+        filters.salesDistrict !== initialFilters.salesDistrict || 
+        filters.dsDivision !== initialFilters.dsDivision) {
+            setRetailerFilterOptions([{ value: 'all', label: 'Loading Retailers...' }]);
+            fetchRetailers(geoFilters).then(data => {
+                const options = data.map(r => ({ value: r.id, label: `${r.name} (${r.district || r.province || 'N/A'})` }));
+                setRetailerFilterOptions([{value: 'all', label: 'All Retailers'}, ...options]);
+            });
+        }
   }, [filters.salesRegion, filters.salesDistrict, filters.dsDivision]);
-
 
   const applyFiltersAndFetchData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
-    setSelectedRetailerForOriginalImage(null);
+    setSelectedRetailerForOriginalImage(null); 
     setDetectedBoardImageIdentifier(undefined);
 
     try {
       const { data, count, providerMetrics: fetchedProviderMetrics } = await fetchBoards(filters);
-      setBoardData(data); // Expect 'data' items to be BoardData, potentially with image ARNs
+      setBoardData(data); 
       setRetailerDataCount(count); 
       setProviderMetrics(fetchedProviderMetrics);
 
-      // Fetch retailers for the map based on the same main filters
       const retailersForMapData = await fetchRetailers(filters); 
       setMapRetailers(retailersForMapData);
 
@@ -185,24 +197,20 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
         const selectedRetailer = retailersForMapData.find(r => r.id === filters.retailerId);
         setSelectedRetailerForOriginalImage(selectedRetailer || null);
 
-        // Logic to find the detected board image identifier
-        // This assumes your `BoardData` objects in `data` might have a field like `detectedBoardImageIdentifier`
-        // or `inferenceImageArn` added by the backend.
         const relevantBoard = data.find(
             b => b.retailerId === filters.retailerId &&
                  (filters.boardType === 'all' || b.boardType.toLowerCase() === filters.boardType.toLowerCase())
         );
         
         if (relevantBoard) {
-            // @ts-ignore --- This line assumes 'detectedBoardImageIdentifier' will be added to BoardData type
-            const detectedId = relevantBoard.detectedBoardImageIdentifier || relevantBoard.specificBoardInferenceArn; 
-            // TODO: Update BoardData type in types.ts and ensure backend populates this.
-            // Example: If BoardData has fields like nameBoardInfS3Arn, tinBoardInfS3Arn etc.
-            // you would pick one based on filters.boardType
-            // For now, if 'detectedId' is undefined, DualImageDisplay will use placeholder.
-            setDetectedBoardImageIdentifier(detectedId);
+            // ** IMPORTANT: This assumes your `BoardData` type and backend response for `/api/boards`
+            // ** now include a field like `detectedBoardImageIdentifier` or `specificBoardInferenceArn`
+            // ** which holds the S3 ARN for the detected board image.
+            // @ts-ignore 
+            const detectedId = relevantBoard.detectedBoardImageIdentifier || relevantBoard.originalBoardImageIdentifier; 
+            // Using originalBoardImageIdentifier as a fallback if detected is not there for placeholder purpose
+            setDetectedBoardImageIdentifier(detectedId); 
         }
-
       }
     } catch (err) {
       console.error("Failed to fetch board data:", err);
@@ -214,9 +222,6 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
 
   const resetFilters = useCallback(() => {
     setFilters(initialFilters);
-    setSelectedRetailerForOriginalImage(null);
-    setDetectedBoardImageIdentifier(undefined);
-    // Data will re-fetch due to useEffect on filters change via applyFiltersAndFetchData
   }, []); 
 
   useEffect(() => {
@@ -228,7 +233,8 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
         alert("No data to download.");
         return;
     }
-    const csvString = convertToCSV(boardData, columnsForDataTable);
+    // Use columnsForBoardView for CSV export if you want it to match the table
+    const csvString = convertToCSV(boardData, columnsForBoardView);
     downloadCSV(csvString, 'board_data.csv');
   };
 
@@ -238,13 +244,13 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
         <RadioGroup
           label="Board Type"
           name="boardType"
-          options={BOARD_TYPES} // Static for now
+          options={BOARD_TYPES}
           selectedValue={filters.boardType}
           onChange={(value) => handleFilterChange('boardType', value)}
         />
         <SelectDropdown
           label="Provider"
-          options={PROVIDER_FILTER_OPTIONS} // Static for now
+          options={PROVIDER_FILTER_OPTIONS}
           value={filters.provider}
           onChange={(e) => handleFilterChange('provider', e.target.value)}
         />
@@ -285,8 +291,8 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
   }, [
     filters, 
     viewMode, 
-    applyFiltersAndFetchData, 
-    resetFilters, 
+    // applyFiltersAndFetchData, // Removed to break potential cycle with setFilters in handleFilterChange
+    // resetFilters, // Already memoized
     handleFilterChange, 
     setSidebarFilters,
     provinceOptions,
@@ -294,6 +300,10 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
     dsDivisionOptions,
     retailerFilterOptions
   ]);
+
+  // Add applyFiltersAndFetchData to the dependency array of the useEffect that calls it.
+  // The useEffect for setting sidebarFilters does not directly call applyFiltersAndFetchData anymore,
+  // it's called by the button in FilterPanel, or by the useEffect monitoring `filters`.
 
   return (
     <div className="space-y-6">
@@ -338,16 +348,17 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
             </div>
             {filters.retailerId !== 'all' && (selectedRetailerForOriginalImage || detectedBoardImageIdentifier) ? (
                 <DualImageDisplay
-                    originalImageIdentifier={selectedRetailerForOriginalImage?.imageIdentifier}
-                    detectedImageIdentifier={detectedBoardImageIdentifier}
-                    altTextPrefix={selectedRetailerForOriginalImage?.name || "Selected item"}
-                    defaultImageUrl="/assets/sample-retailer-placeholder.png" // Ensure this exists in public/assets
+                    originalImageIdentifier={selectedRetailerForOriginalImage?.imageIdentifier} // Retailer's main shop image
+                    detectedImageIdentifier={detectedBoardImageIdentifier} // Specific board's detected image
+                    altTextPrefix={selectedRetailerForOriginalImage?.name || "Board"}
+                    defaultImageUrl="/assets/sample-retailer-placeholder.png"
                 />
             ) : (
                  <p className="text-gray-500 dark:text-gray-400 text-center py-4">
-                    {filters.retailerId !== 'all' 
-                        ? "Image(s) not available for the selected retailer or board type."
-                        : "Select a specific retailer to view images."}
+                    {filters.retailerId === 'all' 
+                        ? "Select a specific retailer to view images."
+                        : "Image(s) not available for the selected retailer or board configuration."
+                    }
                 </p>
             )}
           </div>
@@ -367,15 +378,12 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
               </Button>
             </div>
             <DataTable
-              columns={columnsForDataTable}
+              columns={columnsForBoardView}
               data={boardData}
             />
           </div>
         </>
       )}
-      {/* ImageModal logic might need to be adapted if you want to click on individual images 
-        within DualImageDisplay to show them larger. For now, it's removed to simplify.
-      */}
     </div>
   );
 };
