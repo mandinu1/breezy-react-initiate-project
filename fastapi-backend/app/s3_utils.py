@@ -1,4 +1,5 @@
 from .config import settings
+from typing import List, Dict, Any, Optional
 # import boto3 # Uncomment for real S3
 # from botocore.exceptions import ClientError # Uncomment for real S3
 

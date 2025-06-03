@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import pandas as pd
 
 from app.models import FetchBoardsResponse, BoardFiltersState, ProviderMetric, BoardData
@@ -83,20 +83,51 @@ async def fetch_boards_api(
         # For now, let's take the first found provider.
         # This part needs significant refinement to match your data structure accurately.
         
-        provider_for_row = "Unknown"
-        board_type_for_row = filters.boardType or "Unknown"
+        # Determine provider for the row
+        provider_for_row = "Unknown" # Default
+        board_type_for_row = filters.boardType if filters.boardType and filters.boardType != 'all' else "Mixed"
 
-        # Simplified logic to pick a provider based on non-zero columns
-        # (This needs to align with how `api.ts` expects the `provider` field in `BoardData`)
-        if row.get('DIALOG_NAME_BOARD', 0) > 0 or row.get('DIALOG_TIN_BOARD', 0) > 0 or row.get('DIALOG_SIDE_BOARD', 0) > 0:
+
+        if row.get('DIALOG_NAME_BOARD', 0) > 0 or \
+           row.get('DIALOG_TIN_BOARD', 0) > 0 or \
+           row.get('DIALOG_SIDE_BOARD', 0) > 0:
             provider_for_row = "Dialog"
-        elif row.get('MOBITEL_NAME_BOARD', 0) > 0     # ... and so on for other providers:
+            # If boardType is not specified in filter, try to infer it
+            if board_type_for_row == "Mixed":
+                if row.get('DIALOG_NAME_BOARD',0) > 0 : board_type_for_row = "dealer"
+                elif row.get('DIALOG_TIN_BOARD',0) > 0 : board_type_for_row = "tin"
+                elif row.get('DIALOG_SIDE_BOARD',0) > 0 : board_type_for_row = "vertical"
+        elif row.get('MOBITEL_NAME_BOARD', 0) > 0 or \
+             row.get('MOBITEL_TIN_BOARD', 0) > 0 or \
+             row.get('MOBITEL_SIDE_BOARD', 0) > 0:
+            provider_for_row = "Mobitel"
+            if board_type_for_row == "Mixed":
+                if row.get('MOBITEL_NAME_BOARD',0) > 0 : board_type_for_row = "dealer"
+                elif row.get('MOBITEL_TIN_BOARD',0) > 0 : board_type_for_row = "tin"
+                elif row.get('MOBITEL_SIDE_BOARD',0) > 0 : board_type_for_row = "vertical"
+        elif row.get('AIRTEL_NAME_BOARD', 0) > 0 or \
+             row.get('AIRTEL_TIN_BOARD', 0) > 0 or \
+             row.get('AIRTEL_SIDE_BOARD', 0) > 0:
+            provider_for_row = "Airtel"
+            if board_type_for_row == "Mixed":
+                if row.get('AIRTEL_NAME_BOARD',0) > 0 : board_type_for_row = "dealer"
+                elif row.get('AIRTEL_TIN_BOARD',0) > 0 : board_type_for_row = "tin"
+                elif row.get('AIRTEL_SIDE_BOARD',0) > 0 : board_type_for_row = "vertical"
+        elif row.get('HUTCH_NAME_BOARD', 0) > 0 or \
+             row.get('HUTCH_TIN_BOARD', 0) > 0 or \
+             row.get('HUTCH_SIDE_BOARD', 0) > 0:
+            provider_for_row = "Hutch"
+            if board_type_for_row == "Mixed":
+                if row.get('HUTCH_NAME_BOARD',0) > 0 : board_type_for_row = "dealer"
+                elif row.get('HUTCH_TIN_BOARD',0) > 0 : board_type_for_row = "tin"
+                elif row.get('HUTCH_SIDE_BOARD',0) > 0 : board_type_for_row = "vertical"
+        # Add more elif for other providers if necessary
 
         board_data_list.append(BoardData(
-            id=str(row.get('IMAGE_REF_ID', _)), # Assuming IMAGE_REF_ID is unique for a board instance
+            id=str(row.get('IMAGE_REF_ID', rowIndex)), # Use rowIndex as fallback for id
             retailerId=str(row['PROFILE_ID']),
-            boardType=board_type_for_row, # This needs accurate determination
-            provider=provider_for_row    # This needs accurate determination
+            boardType=board_type_for_row,
+            provider=provider_for_row
         ))
     
     # Calculate ProviderMetrics
