@@ -55,13 +55,18 @@ async def fetch_retailers_api(
 
     output_retailers = []
     for _, row in retailers_df.iterrows():
+        # Handle potential NaN values for optional string fields
+        province_val = row.get('PROVINCE')
+        district_val = row.get('DISTRICT')
+        s3_arn_val = row.get('S3_ARN')
+
         output_retailers.append(Retailer(
             id=str(row['PROFILE_ID']),
-            name=row.get('PROFILE_NAME', 'N/A'),
-            latitude=row['LATITUDE'],
-            longitude=row['LONGITUDE'],
-            imageIdentifier=row.get('S3_ARN'), # Using the main S3_ARN as an identifier
-            province=row.get('PROVINCE'),
-            district=row.get('DISTRICT')
+            name=str(row.get('PROFILE_NAME', 'N/A')),
+            latitude=float(row['LATITUDE']),
+            longitude=float(row['LONGITUDE']),
+            imageIdentifier=None if pd.isna(s3_arn_val) else str(s3_arn_val),
+            province=None if pd.isna(province_val) else str(province_val),
+            district=None if pd.isna(district_val) else str(district_val)
         ))
     return output_retailers
