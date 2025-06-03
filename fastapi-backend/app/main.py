@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import boards, posm, retailers, images, geo
+from app.routers import boards, posm, retailers, images, geo, options
 from app.data_loader import load_dataframes # To load data on startup
 
 app = FastAPI(
@@ -32,6 +32,8 @@ app.include_router(posm.router, prefix=settings.API_V1_STR, tags=["posm"])
 app.include_router(retailers.router, prefix=settings.API_V1_STR, tags=["retailers"])
 app.include_router(images.router, prefix=settings.API_V1_STR, tags=["images"])
 app.include_router(geo.router, prefix=settings.API_V1_STR, tags=["geo"])
+app.include_router(options.router, prefix=settings.API_V1_STR, tags=["options"])
+
 
 @app.get("/")
 async def root():

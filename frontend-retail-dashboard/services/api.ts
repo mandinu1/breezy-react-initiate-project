@@ -138,25 +138,40 @@ export const fetchGeoDsd = async (): Promise<GeoJsonCollection> => {
 
 // Generic data fetching for dropdowns - these would ideally be specific endpoints
 // fetchFilterOptions (for provinces, districts, dsdivisions) - MOCK REMAINS FOR NOW
-export const fetchFilterOptions = async (type: 'provinces' | 'districts' | 'dsdivisions' | 'retailers', parentId?: string): Promise<FilterOption[]> => {
-  console.log(`Fetching options for ${type} (MOCK for non-retailers)`, parentId ? `with parent ${parentId}` : '');
-  await mockDelay(300);
-  if (type === 'retailers') {
-    // This part is now handled by fetchRetailers.
-    // Returning a default or empty array, or you can call fetchRetailers if structure matches.
-    // For simplicity, using the hardcoded example from constants if this specific call is still made.
-    return RETAILERS_EXAMPLE;
+export const fetchProvinces = async (): Promise<FilterOption[]> => {
+  console.log('Fetching provinces (LIVE)');
+  try {
+    const response = await apiClient.get('/options/provinces');
+    return response.data;
+  } catch (error) {
+    console.error("Failed to fetch provinces:", error);
+    return [{ value: 'all', label: 'All Provinces (Error)' }];
   }
-  // Mock data for other types as before, or indicate they should be fetched if backend supports
-  const MOCK_PROVINCES = [ { value: 'all', label: 'All Provinces' }, { value: 'western', label: 'Western' }];
-  const MOCK_DISTRICTS = [ { value: 'all', label: 'All Districts' }, { value: 'colombo', label: 'Colombo' }];
-  const MOCK_DSDIVISIONS = [ { value: 'all', label: 'All DS Divisions' }, { value: 'colombo_ds1', label: 'Colombo DS1'}];
+};
 
-  if (type === 'provinces') return MOCK_PROVINCES;
-  if (type === 'districts') return MOCK_DISTRICTS;
-  if (type === 'dsdivisions') return MOCK_DSDIVISIONS;
-  
-  return [{value: 'all', label: `All ${type}`}];
+export const fetchDistricts = async (provinceValue?: string): Promise<FilterOption[]> => {
+  console.log('Fetching districts (LIVE) for province:', provinceValue);
+  try {
+    const params = provinceValue && provinceValue !== 'all' ? { province: provinceValue } : {};
+    const response = await apiClient.get('/options/districts', { params });
+    return response.data;
+  } catch (error) {
+    console.error("Failed to fetch districts:", error);
+    return [{ value: 'all', label: 'All Districts (Error)' }];
+  }
+};
+
+// Add fetchDsDivisions similarly
+export const fetchDsDivisions = async (districtValue?: string): Promise<FilterOption[]> => {
+  console.log('Fetching DS Divisions (LIVE) for district:', districtValue);
+  try {
+    const params = districtValue && districtValue !== 'all' ? { district: districtValue } : {};
+    const response = await apiClient.get('/options/ds-divisions', { params }); // Assuming you create this backend endpoint
+    return response.data;
+  } catch (error) {
+    console.error("Failed to fetch DS Divisions:", error);
+    return [{ value: 'all', label: 'All DS Divisions (Error)' }];
+  }
 };
 
 export const fetchRetailers = async (filters: any): Promise<Retailer[]> => {
