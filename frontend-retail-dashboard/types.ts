@@ -162,8 +162,15 @@ export interface PosmComparisonData {
   batch2: PosmBatchDetails;
   differences: { provider: string; diff: number }[];
 }
-
-
+export interface Retailer {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  imageIdentifier?: string;
+  province?: string;
+  district?: string;
+}
 // For Leaflet, if needed, but usually imported from @types/leaflet
 // declare module 'leaflet' {
 //   interface MapOptions {

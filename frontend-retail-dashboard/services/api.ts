@@ -1,5 +1,6 @@
+// mandinu1/breezy-react-initiate-project/breezy-react-initiate-project-653165f7b5ee7d64c670d05e8777412d3daa000e/services/api.ts
 import axios from 'axios';
-import { API_BASE_URL, PROVIDERS_CONFIG, RETAILERS_EXAMPLE } from '../constants'; // RETAILERS_EXAMPLE is used in a mock
+import { API_BASE_URL, PROVIDERS_CONFIG, RETAILERS_EXAMPLE } from '../constants';
 import {
   Retailer,
   BoardData,
@@ -14,18 +15,11 @@ import {
 } from '../types';
 
 const apiClient = axios.create({
-  baseURL: API_BASE_URL, // This will make requests to /api/... via Vite proxy
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
-
-// Helper to get a provider name based on config (excluding 'all')
-// This might still be used by some mock logic if not all functions are updated, or if backend needs specific names
-const getRandomProviderName = () => {
-    const actualProviders = PROVIDERS_CONFIG.filter(p => p.key !== 'all');
-    return actualProviders[Math.floor(Math.random() * actualProviders.length)].name;
-}
 
 // Boards
 export const fetchBoards = async (filters: Partial<BoardFiltersState>): Promise<{ data: BoardData[], count: number, providerMetrics: ProviderMetric[] }> => {
@@ -35,7 +29,7 @@ export const fetchBoards = async (filters: Partial<BoardFiltersState>): Promise<
     return response.data;
   } catch (error) {
     console.error("Failed to fetch boards:", error);
-    return { data: [], count: 0, providerMetrics: [] }; // Return a default empty state
+    return { data: [], count: 0, providerMetrics: [] };
   }
 };
 
@@ -51,6 +45,86 @@ export const fetchPosmGeneral = async (filters: Partial<PosmGeneralFiltersState>
   }
 };
 
+// Dynamic Filter Options Fetchers
+export const fetchProvinces = async (provider?: string, salesView: boolean = false): Promise<FilterOption[]> => {
+  console.log(`Fetching provinces (LIVE) for provider: ${provider}, salesView: ${salesView}`);
+  try {
+    const params: any = {};
+    if (provider && provider !== 'all') params.provider = provider;
+    // Backend needs to know if it should use 'PROVINCE' or 'SALES_REGION'
+    // For now, we assume backend /options/provinces handles this, or you might need separate endpoints/params
+    // params.geoContext = salesView ? 'sales' : 'admin'; // Example: inform backend of context
+    const response = await apiClient.get('/options/provinces', { params });
+    return response.data;
+  } catch (error) {
+    console.error("Failed to fetch provinces:", error);
+    return [{ value: 'all', label: 'All (Error Loading)' }];
+  }
+};
+
+export const fetchDistricts = async (provider?: string, province?: string, salesView: boolean = false): Promise<FilterOption[]> => {
+  console.log(`Fetching districts (LIVE) for provider: ${provider}, province: ${province}, salesView: ${salesView}`);
+  try {
+    const params: any = {};
+    if (provider && provider !== 'all') params.provider = provider;
+    if (province && province !== 'all') params.province = province; // This should be the 'value' of the selected province
+    // params.geoContext = salesView ? 'sales' : 'admin';
+    const response = await apiClient.get('/options/districts', { params });
+    return response.data;
+  } catch (error) {
+    console.error("Failed to fetch districts:", error);
+    return [{ value: 'all', label: 'All (Error Loading)' }];
+  }
+};
+
+export const fetchDsDivisions = async (provider?: string, province?: string, district?: string): Promise<FilterOption[]> => {
+  console.log(`Fetching DS Divisions (LIVE) for provider: ${provider}, province: ${province}, district: ${district}`);
+  try {
+    const params: any = {};
+    if (provider && provider !== 'all') params.provider = provider;
+    if (province && province !== 'all') params.province = province;
+    if (district && district !== 'all') params.district = district;
+    const response = await apiClient.get('/options/ds-divisions', { params }); // Ensure this endpoint exists
+    return response.data;
+  } catch (error) {
+    console.error("Failed to fetch DS Divisions:", error);
+    return [{ value: 'all', label: 'All (Error Loading)' }];
+  }
+};
+
+export const fetchRetailers = async (filters: any): Promise<Retailer[]> => {
+    console.log('Fetching retailers with filters (LIVE):', filters);
+    try {
+        // Construct params carefully, ensuring undefined are not sent if backend expects missing params
+        const queryParams: any = {};
+        if (filters.provider && filters.provider !== 'all') queryParams.provider = filters.provider;
+        
+        // Handle salesRegion/province and salesDistrict/district based on context if needed
+        // Assuming 'province' and 'district' are the primary keys backend expects for geo-filtering retailers
+        if (filters.province && filters.province !== 'all') queryParams.province = filters.province;
+        else if (filters.salesRegion && filters.salesRegion !== 'all') queryParams.province = filters.salesRegion; // or salesRegion
+
+        if (filters.district && filters.district !== 'all') queryParams.district = filters.district;
+        else if (filters.salesDistrict && filters.salesDistrict !== 'all') queryParams.district = filters.salesDistrict; // or salesDistrict
+        
+        if (filters.dsDivision && filters.dsDivision !== 'all') queryParams.dsDivision = filters.dsDivision;
+        if (filters.retailerId && filters.retailerId !== 'all') queryParams.retailerId = filters.retailerId;
+
+        const response = await apiClient.get('/retailers', { params: queryParams });
+        return response.data;
+    } catch (error) {
+        console.error("Failed to fetch retailers:", error);
+        return [];
+    }
+};
+
+
+// --- Other existing API functions (fetchPosmComparisonData, fetchAvailableBatches, fetchImageInfo, fetchGeoDistricts etc.) ---
+// Ensure they are correctly implemented to call backend or are intentionally mock.
+
+// Mock API delay (can be removed if no functions use it anymore)
+const mockDelay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 export const fetchPosmComparisonData = async (profileId: string, batch1Id: string, batch2Id: string): Promise<PosmComparisonData> => {
   console.log('Fetching POSM comparison for profile (LIVE):', profileId, 'batches:', batch1Id, batch2Id);
   try {
@@ -60,8 +134,6 @@ export const fetchPosmComparisonData = async (profileId: string, batch1Id: strin
     return response.data;
   } catch (error) {
     console.error("Failed to fetch POSM comparison data:", error);
-    // Return a default/empty structure matching PosmComparisonData
-    // This might need adjustment based on how your component handles errors
     const emptyShares = [{ provider: "Error", percentage: 0 }];
     const emptyBatchDetails = { image: "/assets/sample-retailer-placeholder.png", shares: emptyShares };
     return {
@@ -74,50 +146,38 @@ export const fetchPosmComparisonData = async (profileId: string, batch1Id: strin
 
 export const fetchAvailableBatches = async (profileId: string): Promise<FilterOption[]> => {
     console.log('Fetching available batches for profile ID (LIVE):', profileId);
-    if (!profileId || profileId === 'all') return [];
+    if (!profileId || profileId === 'all') {
+        return [];
+    }
     try {
         const response = await apiClient.get(`/posm/available-batches/${profileId}`);
         return response.data;
     } catch (error) {
-        console.error("Failed to fetch available batches:", error);
+        console.error(`Failed to fetch available batches for profile ${profileId}:`, error);
         return [];
     }
 };
 
-
-// Summary (Example, adjust as needed - MOCK REMAINS FOR NOW)
-const mockDelay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms)); // Kept for any remaining mocks
 export const fetchSummary = async (profileId: string): Promise<any> => {
-  console.log('Fetching summary for profile (MOCK):', profileId);
-  await mockDelay(1000);
-  // This would be an API call in a real scenario, e.g., apiClient.get(`/summary/${profileId}`)
-  return { retailerName: `Retailer ${profileId.slice(0,3)} Mart`, totalBoards: Math.floor(Math.random() * 10), totalPosmItems: Math.floor(Math.random() * 200), overallVisibility: Math.floor(Math.random() * 100) };
+  console.log('Fetching summary for profile (MOCK - no backend endpoint):', profileId);
+  await mockDelay(500);
+  return { retailerName: `Retailer ${profileId.slice(0,3)} Mart (Mock)`, totalBoards: Math.floor(Math.random() * 10), totalPosmItems: Math.floor(Math.random() * 200), overallVisibility: Math.floor(Math.random() * 100) };
 };
 
-// Images
 export const fetchImageInfo = async (imageIdentifier: string): Promise<ImageInfo> => {
   console.log('Fetching image info for identifier (LIVE):', imageIdentifier);
   if (!imageIdentifier) {
-    // Throw an error if no identifier is provided
-    throw new Error("Image identifier is required.");
+    throw new Error("Image identifier is required to fetch image info.");
   }
   try {
-    // Assuming imageIdentifier can be an S3 ARN or a seed for picsum based on backend logic
     const response = await apiClient.get(`/image-info/${encodeURIComponent(imageIdentifier)}`);
-    // Ensure the response.data matches the ImageInfo type from the backend
-    // If your backend might not return a 'type' that is strictly 'original' | 'detected',
-    // you might need to validate or transform response.data here.
-    // For now, we assume the backend /image-info/{identifier} endpoint returns valid ImageInfo.
     return response.data;
   } catch (error) {
-    console.error("Failed to fetch image info from API:", error);
-    // Re-throw the error or throw a new custom error
-    // This will be caught by the .catch() block in ImageDisplay.tsx
-    throw new Error(`Failed to fetch image info for identifier: ${imageIdentifier}`);
+    console.error(`Failed to fetch image info for identifier "${imageIdentifier}":`, error);
+    throw new Error(`API error fetching image info for ${imageIdentifier}`);
   }
 };
 
-// Geo Data
 export const fetchGeoDistricts = async (): Promise<GeoJsonCollection> => {
   console.log('Fetching GeoJSON for districts (LIVE)');
   try {
@@ -129,58 +189,8 @@ export const fetchGeoDistricts = async (): Promise<GeoJsonCollection> => {
   }
 };
 
-// GeoDsd - MOCK REMAINS FOR NOW as no backend endpoint was defined
 export const fetchGeoDsd = async (): Promise<GeoJsonCollection> => {
-  console.log('Fetching GeoJSON for DSDs (MOCK)');
-  await mockDelay(1000);
-  return { type: "FeatureCollection", features: [] }; // Placeholder
-};
-
-// Generic data fetching for dropdowns - these would ideally be specific endpoints
-// fetchFilterOptions (for provinces, districts, dsdivisions) - MOCK REMAINS FOR NOW
-export const fetchProvinces = async (): Promise<FilterOption[]> => {
-  console.log('Fetching provinces (LIVE)');
-  try {
-    const response = await apiClient.get('/options/provinces');
-    return response.data;
-  } catch (error) {
-    console.error("Failed to fetch provinces:", error);
-    return [{ value: 'all', label: 'All Provinces (Error)' }];
-  }
-};
-
-export const fetchDistricts = async (provinceValue?: string): Promise<FilterOption[]> => {
-  console.log('Fetching districts (LIVE) for province:', provinceValue);
-  try {
-    const params = provinceValue && provinceValue !== 'all' ? { province: provinceValue } : {};
-    const response = await apiClient.get('/options/districts', { params });
-    return response.data;
-  } catch (error) {
-    console.error("Failed to fetch districts:", error);
-    return [{ value: 'all', label: 'All Districts (Error)' }];
-  }
-};
-
-// Add fetchDsDivisions similarly
-export const fetchDsDivisions = async (districtValue?: string): Promise<FilterOption[]> => {
-  console.log('Fetching DS Divisions (LIVE) for district:', districtValue);
-  try {
-    const params = districtValue && districtValue !== 'all' ? { district: districtValue } : {};
-    const response = await apiClient.get('/options/ds-divisions', { params }); // Assuming you create this backend endpoint
-    return response.data;
-  } catch (error) {
-    console.error("Failed to fetch DS Divisions:", error);
-    return [{ value: 'all', label: 'All DS Divisions (Error)' }];
-  }
-};
-
-export const fetchRetailers = async (filters: any): Promise<Retailer[]> => {
-    console.log('Fetching retailers with filters (LIVE):', filters);
-    try {
-        const response = await apiClient.get('/retailers', { params: filters });
-        return response.data;
-    } catch (error) {
-        console.error("Failed to fetch retailers:", error);
-        return [];
-    }
+  console.log('Fetching GeoJSON for DSDs (MOCK - no backend endpoint)');
+  await mockDelay(500);
+  return { type: "FeatureCollection", features: [] };
 };

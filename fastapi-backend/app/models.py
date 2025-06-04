@@ -18,7 +18,7 @@ class Retailer(BaseModel):
 class BoardData(BaseModel):
     # Core derived/key fields
     id: str                   # Unique ID for the board entry (e.g., from IMAGE_REF_ID)
-    retailerId: str           # Corresponds to PROFILE_ID
+    retailerId: Optional[str] = None # Corresponds to PROFILE_ID
 
     # Raw data fields from your data source (board.csv)
     PROFILE_ID: Optional[str] = None
@@ -28,32 +28,29 @@ class BoardData(BaseModel):
     DS_DIVISION: Optional[str] = None
     GN_DIVISION: Optional[str] = None
     SALES_DISTRICT: Optional[str] = None
-    SALES_AREA: Optional[str] = None # Ensure this column exists in your board.csv
+    SALES_AREA: Optional[str] = None
     SALES_REGION: Optional[str] = None
 
-    # Board type and provider determined by backend logic
-    boardType: str
-    provider: str
+    # Board type and provider determined by backend logic for this specific entry
+    boardType: Optional[str] = "N/A" # Default if not determinable
+    provider: Optional[str] = "Unknown" # Default if not determinable
 
-    # Board counts
-    DIALOG_NAME_BOARD: Optional[int] = None
-    MOBITEL_NAME_BOARD: Optional[int] = None
-    HUTCH_NAME_BOARD: Optional[int] = None
-    AIRTEL_NAME_BOARD: Optional[int] = None
-    DIALOG_SIDE_BOARD: Optional[int] = None
-    MOBITEL_SIDE_BOARD: Optional[int] = None
-    HUTCH_SIDE_BOARD: Optional[int] = None
-    AIRTEL_SIDE_BOARD: Optional[int] = None
-    DIALOG_TIN_BOARD: Optional[int] = None
-    MOBITEL_TIN_BOARD: Optional[int] = None
-    HUTCH_TIN_BOARD: Optional[int] = None
-    AIRTEL_TIN_BOARD: Optional[int] = None
+    # Board counts (ensure these are numbers from your CSV or handled)
+    DIALOG_NAME_BOARD: Optional[int] = Field(default=0)
+    MOBITEL_NAME_BOARD: Optional[int] = Field(default=0)
+    HUTCH_NAME_BOARD: Optional[int] = Field(default=0)
+    AIRTEL_NAME_BOARD: Optional[int] = Field(default=0)
+    DIALOG_SIDE_BOARD: Optional[int] = Field(default=0)
+    MOBITEL_SIDE_BOARD: Optional[int] = Field(default=0)
+    HUTCH_SIDE_BOARD: Optional[int] = Field(default=0)
+    AIRTEL_SIDE_BOARD: Optional[int] = Field(default=0)
+    DIALOG_TIN_BOARD: Optional[int] = Field(default=0)
+    MOBITEL_TIN_BOARD: Optional[int] = Field(default=0)
+    HUTCH_TIN_BOARD: Optional[int] = Field(default=0)
+    AIRTEL_TIN_BOARD: Optional[int] = Field(default=0)
     
-    # For Dual Image Display in BoardView
-    # S3_ARN from board.csv can be the original image of the *board capture*
     originalBoardImageIdentifier: Optional[str] = None 
-    # This would be the specific inference ARN, e.g., NAME_BOARD_INF_S3_ARN
-    detectedBoardImageIdentifier: Optional[str] = None 
+    detectedBoardImageIdentifier: Optional[str] = None
 
 class ProviderMetric(BaseModel):
     provider: str
@@ -69,38 +66,36 @@ class FetchBoardsResponse(BaseModel):
 class BoardFiltersState(BaseModel):
     boardType: Optional[str] = None
     provider: Optional[str] = None
-    salesRegion: Optional[str] = None
-    salesDistrict: Optional[str] = None
+    salesRegion: Optional[str] = None 
+    salesDistrict: Optional[str] = None 
     dsDivision: Optional[str] = None
     retailerId: Optional[str] = None
 
 class PosmData(BaseModel):
-    # Core derived/key fields
-    id: str                   # Unique ID for the POSM entry (e.g., from IMAGE_REF_ID)
-    retailerId: str           # Corresponds to PROFILE_ID
+    id: str                   
+    retailerId: Optional[str] = None        
     
-    # Main provider & visibility for this specific POSM entry
-    provider: str
-    visibilityPercentage: float 
-
-    # Raw data fields from your data source (posm.csv)
+    # Fields for table display as per your request
     PROFILE_NAME: Optional[str] = None
     PROVINCE: Optional[str] = None
     DISTRICT: Optional[str] = None
-    # Add other relevant fields from posm.csv that you want to pass to frontend:
-    # DS_DIVISION: Optional[str] = None 
-    # SALES_DISTRICT: Optional[str] = None
-    # SALES_REGION: Optional[str] = None
+    DS_DIVISION: Optional[str] = None
+    GN_DIVISION: Optional[str] = None
+    SALES_REGION: Optional[str] = None
+    SALES_DISTRICT: Optional[str] = None
+    SALES_AREA: Optional[str] = None
 
-    # Provider-specific area percentages
-    DIALOG_AREA_PERCENTAGE: Optional[float] = None
-    AIRTEL_AREA_PERCENTAGE: Optional[float] = None
-    MOBITEL_AREA_PERCENTAGE: Optional[float] = None
-    HUTCH_AREA_PERCENTAGE: Optional[float] = None
+    DIALOG_AREA_PERCENTAGE: Optional[float] = Field(default=0.0)
+    AIRTEL_AREA_PERCENTAGE: Optional[float] = Field(default=0.0)
+    MOBITEL_AREA_PERCENTAGE: Optional[float] = Field(default=0.0)
+    HUTCH_AREA_PERCENTAGE: Optional[float] = Field(default=0.0)
     
-    # For images related to this POSM entry (if needed for a POSM-specific image display)
-    originalPosmImageIdentifier: Optional[str] = None # e.g., S3_ARN from posm.csv
-    detectedPosmImageIdentifier: Optional[str] = None # e.g., INF_S3_ARN from posm.csv
+    # These fields are no longer primary for table display but might be used by other logic (e.g., PercentageBar)
+    provider: Optional[str] = "Unknown" # Main provider for the POSM entry (can be derived)
+    visibilityPercentage: Optional[float] = Field(default=0.0) # Overall visibility (can be derived)
+
+    originalPosmImageIdentifier: Optional[str] = None 
+    detectedPosmImageIdentifier: Optional[str] = None 
 
 class FetchPosmGeneralResponse(BaseModel):
     data: List[PosmData]
@@ -116,6 +111,7 @@ class PosmGeneralFiltersState(BaseModel):
     posmStatus: Optional[str] = None
     visibilityRange: Optional[Tuple[float, float]] = Field(default=(0, 100))
 
+# --- Other models remain the same (GeoJSON, ImageInfo, PosmBatch, etc.) ---
 class GeoJsonFeatureProperties(BaseModel):
     name: str
     value: Optional[float] = None
@@ -137,14 +133,14 @@ class GeoJsonCollection(BaseModel):
 class ImageInfo(BaseModel):
     id: str
     url: str
-    type: str # 'original' | 'detected' (or others as defined by your backend logic)
+    type: str
 
 class PosmBatchShare(BaseModel):
     provider: str
     percentage: float
 
 class PosmBatchDetails(BaseModel):
-    image: str # URL
+    image: str 
     shares: List[PosmBatchShare]
     maxCapturePhase: Optional[str] = None
 
