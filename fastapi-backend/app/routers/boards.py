@@ -2,13 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Dict, Any, Optional
 import pandas as pd
 
-from app.models import FetchBoardsResponse, BoardFiltersState, ProviderMetric, BoardData 
+from app.models import FetchBoardsResponse, BoardFiltersState, ProviderMetric, BoardData
 from app.dependencies import get_boards_df
 from app.data_loader import filter_by_max_capture_phase
 
 router = APIRouter()
 
-PROVIDERS_CONFIG_SIMPLE = [
+PROVIDERS_CONFIG_SIMPLE_BOARDS = [
     {"value": "all", "name": "All"},
     {"value": "dialog", "name": "Dialog"},
     {"value": "mobitel", "name": "Mobitel"},
@@ -16,17 +16,17 @@ PROVIDERS_CONFIG_SIMPLE = [
     {"value": "hutch", "name": "Hutch"},
 ]
 
-def get_provider_name_from_value(value: str) -> Optional[str]:
-    for p_config in PROVIDERS_CONFIG_SIMPLE:
+def get_provider_name_from_value_boards(value: str) -> Optional[str]:
+    for p_config in PROVIDERS_CONFIG_SIMPLE_BOARDS:
         if p_config["value"] == value:
             return p_config["name"]
     return None
 
 def safe_int_convert(value, default_value: Optional[int] = 0) -> Optional[int]:
     if pd.isna(value):
-        return None # Pydantic Optional will handle None
+        return None
     try:
-        return int(float(value)) # Convert to float first to handle "1.0" then to int
+        return int(float(value))
     except (ValueError, TypeError):
         return default_value
 
@@ -47,104 +47,110 @@ async def fetch_boards_api(
     if df.empty:
         return FetchBoardsResponse(data=[], count=0, providerMetrics=[])
 
-    # Apply provider and boardType specific filtering
-    if filters.provider and filters.provider != 'all':
-        provider_name_filter = get_provider_name_from_value(filters.provider)
-        if provider_name_filter:
-            provider_column_prefix = provider_name_filter.upper()
-            condition_met = pd.Series(False, index=df.index)
-            
-            if not filters.boardType or filters.boardType == 'all': # Any board for this provider
-                for bt_suffix in ["_NAME_BOARD", "_TIN_BOARD", "_SIDE_BOARD"]:
-                    col = f"{provider_column_prefix}{bt_suffix}"
-                    if col in df.columns: condition_met = condition_met | (df[col].fillna(0) > 0)
-            elif filters.boardType == 'dealer' and f"{provider_column_prefix}_NAME_BOARD" in df.columns:
-                condition_met = df[f"{provider_column_prefix}_NAME_BOARD"].fillna(0) > 0
-            elif filters.boardType == 'tin' and f"{provider_column_prefix}_TIN_BOARD" in df.columns:
-                condition_met = df[f"{provider_column_prefix}_TIN_BOARD"].fillna(0) > 0
-            elif filters.boardType == 'vertical' and f"{provider_column_prefix}_SIDE_BOARD" in df.columns:
-                condition_met = df[f"{provider_column_prefix}_SIDE_BOARD"].fillna(0) > 0
-            df = df[condition_met]
-    elif filters.boardType and filters.boardType != 'all': # Provider is 'all', but specific boardType
-        condition_met = pd.Series(False, index=df.index)
-        for p_config in PROVIDERS_CONFIG_SIMPLE:
-            if p_config['name'] == 'All': continue
-            p_prefix = p_config['name'].upper()
-            if filters.boardType == 'dealer' and f"{p_prefix}_NAME_BOARD" in df.columns:
-                condition_met = condition_met | (df[f"{p_prefix}_NAME_BOARD"].fillna(0) > 0)
-            elif filters.boardType == 'tin' and f"{p_prefix}_TIN_BOARD" in df.columns:
-                condition_met = condition_met | (df[f"{p_prefix}_TIN_BOARD"].fillna(0) > 0)
-            elif filters.boardType == 'vertical' and f"{p_prefix}_SIDE_BOARD" in df.columns:
-                condition_met = condition_met | (df[f"{p_prefix}_SIDE_BOARD"].fillna(0) > 0)
-        df = df[condition_met]
-
-    # Geographic and Retailer ID filters
-    if filters.salesRegion and filters.salesRegion != 'all' and 'SALES_REGION' in df.columns:
-         df = df[df['SALES_REGION'].astype(str).str.lower() == filters.salesRegion.lower()]
-    elif filters.salesRegion and filters.salesRegion != 'all' and 'PROVINCE' in df.columns: # Fallback
-         df = df[df['PROVINCE'].astype(str).str.lower() == filters.salesRegion.lower()]
-
-    if filters.salesDistrict and filters.salesDistrict != 'all' and 'SALES_DISTRICT' in df.columns:
-         df = df[df['SALES_DISTRICT'].astype(str).str.lower() == filters.salesDistrict.lower()]
-    elif filters.salesDistrict and filters.salesDistrict != 'all' and 'DISTRICT' in df.columns: # Fallback
-         df = df[df['DISTRICT'].astype(str).str.lower() == filters.salesDistrict.lower()]
-    
-    if filters.dsDivision and filters.dsDivision != 'all' and 'DS_DIVISION' in df.columns:
-         df = df[df['DS_DIVISION'].astype(str).str.lower() == filters.dsDivision.lower()]
-
+    # Apply retailerId filter first if present, as it's the most specific
     if filters.retailerId and filters.retailerId != 'all' and 'PROFILE_ID' in df.columns:
         df = df[df['PROFILE_ID'].astype(str) == filters.retailerId]
+        if df.empty: # If selected retailer has no data after this, no point proceeding
+            return FetchBoardsResponse(data=[], count=0, providerMetrics=[])
+
+
+    # Apply provider and boardType specific filtering
+    # This logic tries to find rows where the specified provider has the specified board type.
+    # If provider is 'all', it checks for the board type across all providers.
+    # If boardType is 'all', it checks for any board type for the specified provider.
+
+    provider_name_filter = get_provider_name_from_value_boards(filters.provider) if filters.provider and filters.provider != 'all' else None
+    board_type_filter = filters.boardType if filters.boardType and filters.boardType != 'all' else 'all'
+
+    if provider_name_filter or board_type_filter != 'all':
+        conditions = pd.Series(False, index=df.index)
+        providers_to_check = [provider_name_filter] if provider_name_filter else [p['name'] for p in PROVIDERS_CONFIG_SIMPLE_BOARDS if p['name'] != 'All']
+        
+        board_suffixes_map = {
+            'dealer': ['_NAME_BOARD'],
+            'tin': ['_TIN_BOARD'],
+            'vertical': ['_SIDE_BOARD'],
+            'all': ['_NAME_BOARD', '_TIN_BOARD', '_SIDE_BOARD']
+        }
+        suffixes_to_check = board_suffixes_map.get(board_type_filter, [])
+
+        for p_name in providers_to_check:
+            p_prefix = p_name.upper()
+            for suffix in suffixes_to_check:
+                col = f"{p_prefix}{suffix}"
+                if col in df.columns:
+                    conditions = conditions | (pd.to_numeric(df[col], errors='coerce').fillna(0) > 0)
+        df = df[conditions]
+        if df.empty:
+             return FetchBoardsResponse(data=[], count=0, providerMetrics=[])
+
+
+    # Geographic filters (applied after retailer and type/provider filters if they were specific)
+    # If a retailerId was already applied, these geo filters act as a sub-filter IF that retailer matches the geo.
+    # Or, if no retailerId, these broadly filter the dataset.
+    province_col_actual = 'PROVINCE' if 'PROVINCE' in df.columns else 'SALES_REGION'
+    if filters.salesRegion and filters.salesRegion != 'all' and province_col_actual in df.columns:
+         df = df[df[province_col_actual].str.lower().replace(' ', '_', regex=False) == filters.salesRegion.lower()]
+
+    district_col_actual = 'DISTRICT' if 'DISTRICT' in df.columns else 'SALES_DISTRICT'
+    if filters.salesDistrict and filters.salesDistrict != 'all' and district_col_actual in df.columns:
+         df = df[df[district_col_actual].str.lower().replace(' ', '_', regex=False) == filters.salesDistrict.lower()]
+    
+    if filters.dsDivision and filters.dsDivision != 'all' and 'DS_DIVISION' in df.columns:
+         df = df[df['DS_DIVISION'].str.lower().replace(' ', '_', regex=False) == filters.dsDivision.lower()]
+    
+    if df.empty: # Check again after geo filters
+        return FetchBoardsResponse(data=[], count=0, providerMetrics=[])
+
 
     board_data_list: List[BoardData] = []
     for rowIndex, row in df.iterrows():
-        # Determine primary provider and boardType for this row based on actual data counts
-        determined_provider = "Unknown"
-        determined_board_type = "N/A"
-        
-        provider_board_counts = {}
-        for p_cfg in PROVIDERS_CONFIG_SIMPLE:
-            if p_cfg['name'] == 'All': continue
-            p_key = p_cfg['name'].upper()
-            provider_board_counts[p_cfg['name']] = {
-                'dealer': row.get(f"{p_key}_NAME_BOARD", 0),
-                'tin': row.get(f"{p_key}_TIN_BOARD", 0),
-                'vertical': row.get(f"{p_key}_SIDE_BOARD", 0)
-            }
-        
-        # Determine provider based on presence and filter
-        if filters.provider and filters.provider != 'all':
-            provider_filter_name = get_provider_name_from_value(filters.provider)
-            if provider_filter_name and sum(provider_board_counts.get(provider_filter_name, {}).values()) > 0:
-                determined_provider = provider_filter_name
-        else: # Infer provider if 'all'
-            for p_name, counts in provider_board_counts.items():
-                if sum(counts.values()) > 0:
-                    determined_provider = p_name
-                    break # Take first one with any board
-        
-        # Determine board type based on presence for the determined_provider or filter
-        if filters.boardType and filters.boardType != 'all':
-            determined_board_type = filters.boardType
-        elif determined_provider != "Unknown":
-            counts = provider_board_counts.get(determined_provider, {})
-            if counts.get('dealer', 0) > 0: determined_board_type = "dealer"
-            elif counts.get('tin', 0) > 0: determined_board_type = "tin"
-            elif counts.get('vertical', 0) > 0: determined_board_type = "vertical"
+        # Determine primary provider and boardType for this specific entry from the filtered row
+        # This part is tricky if a row can represent multiple boards. Assuming one dominant one for display.
+        determined_provider_for_entry = "Unknown"
+        determined_board_type_for_entry = "N/A"
 
-        original_id = safe_str_convert(row.get('S3_ARN'))
-        detected_id = None
+        # Logic to determine provider and boardType for *this specific row*
+        # (This might be different from the filters applied if filters were 'all')
+        highest_count = 0
+        for p_cfg_iter in PROVIDERS_CONFIG_SIMPLE_BOARDS:
+            if p_cfg_iter['name'] == 'All': continue
+            p_key_iter = p_cfg_iter['name'].upper()
+            for bt_val_iter, bt_label_iter, suffix_iter in [('dealer', 'Dealer Board', '_NAME_BOARD'), ('tin', 'Tin Plate', '_TIN_BOARD'), ('vertical', 'Vertical Board', '_SIDE_BOARD')]:
+                col_name_iter = f"{p_key_iter}{suffix_iter}"
+                if col_name_iter in row and pd.to_numeric(row[col_name_iter], errors='coerce').fillna(0) > 0:
+                    current_val = pd.to_numeric(row[col_name_iter], errors='coerce').fillna(0)
+                    if current_val > highest_count : # Simple heuristic: provider/type with most boards on this row
+                        highest_count = current_val
+                        determined_provider_for_entry = p_cfg_iter['name']
+                        determined_board_type_for_entry = bt_val_iter
+                    # If no single dominant, the first one found for this row.
+                    elif determined_provider_for_entry == "Unknown":
+                         determined_provider_for_entry = p_cfg_iter['name']
+                         determined_board_type_for_entry = bt_val_iter
+
+
+        original_id = safe_str_convert(row.get('S3_ARN')) # Main image for the retailer/location
+        detected_id = None # This should be specific to the board type detected
+
         inf_s3_arn_col_map = {
             "dealer": "_NAME_BOARD_INF_S3_ARN",
             "tin": "_TIN_BOARD_INF_S3_ARN",
             "vertical": "_SIDE_BOARD_INF_S3_ARN"
         }
-        if determined_provider != "Unknown" and determined_board_type in inf_s3_arn_col_map:
-            inf_col_suffix = inf_s3_arn_col_map[determined_board_type]
-            detected_id = safe_str_convert(row.get(f'{determined_provider.upper()}{inf_col_suffix}'))
-            if not detected_id: # Fallback if provider specific inference ARN is not present
-                 detected_id = safe_str_convert(row.get(f'TIN_BOARD_INF_S3_ARN')) or \
-                               safe_str_convert(row.get(f'SIDE_BOARD_INF_S3_ARN')) or \
-                               safe_str_convert(row.get(f'NAME_BOARD_INF_S3_ARN'))
+        if determined_provider_for_entry != "Unknown" and determined_board_type_for_entry in inf_s3_arn_col_map:
+            inf_col_suffix = inf_s3_arn_col_map[determined_board_type_for_entry]
+            detected_id_col = f'{determined_provider_for_entry.upper()}{inf_col_suffix}'
+            if detected_id_col in row:
+                 detected_id = safe_str_convert(row.get(detected_id_col))
+            # Fallback if provider-specific inference ARN is not present, try generic ones
+            if not detected_id:
+                if determined_board_type_for_entry == "dealer" and "NAME_BOARD_INF_S3_ARN" in row:
+                    detected_id = safe_str_convert(row.get("NAME_BOARD_INF_S3_ARN"))
+                elif determined_board_type_for_entry == "tin" and "TIN_BOARD_INF_S3_ARN" in row:
+                    detected_id = safe_str_convert(row.get("TIN_BOARD_INF_S3_ARN"))
+                elif determined_board_type_for_entry == "vertical" and "SIDE_BOARD_INF_S3_ARN" in row:
+                    detected_id = safe_str_convert(row.get("SIDE_BOARD_INF_S3_ARN"))
 
 
         item = BoardData(
@@ -159,8 +165,8 @@ async def fetch_boards_api(
             SALES_DISTRICT=safe_str_convert(row.get('SALES_DISTRICT')),
             SALES_AREA=safe_str_convert(row.get('SALES_AREA')),
             SALES_REGION=safe_str_convert(row.get('SALES_REGION')),
-            boardType=determined_board_type,
-            provider=determined_provider,
+            boardType=determined_board_type_for_entry,
+            provider=determined_provider_for_entry,
             DIALOG_NAME_BOARD=safe_int_convert(row.get('DIALOG_NAME_BOARD')),
             MOBITEL_NAME_BOARD=safe_int_convert(row.get('MOBITEL_NAME_BOARD')),
             HUTCH_NAME_BOARD=safe_int_convert(row.get('HUTCH_NAME_BOARD')),
@@ -177,38 +183,34 @@ async def fetch_boards_api(
             detectedBoardImageIdentifier=detected_id
         )
         board_data_list.append(item)
-    
-    # Calculate ProviderMetrics
-    final_provider_counts: Dict[str, set] = {p['name']: set() for p in PROVIDERS_CONFIG_SIMPLE if p['name'] != 'All'}
+
+    # Calculate ProviderMetrics based on the *final filtered df* before converting to BoardData list
+    # This should count unique PROFILE_IDs that have boards for each provider matching the filters
+    final_provider_counts: Dict[str, set] = {p['name']: set() for p in PROVIDERS_CONFIG_SIMPLE_BOARDS if p['name'] != 'All'}
     if not df.empty and 'PROFILE_ID' in df.columns:
-        for p_config in PROVIDERS_CONFIG_SIMPLE:
-            p_name = p_config['name']
-            if p_name == 'All': continue
+        for p_config_metric in PROVIDERS_CONFIG_SIMPLE_BOARDS:
+            p_name_metric = p_config_metric['name']
+            if p_name_metric == 'All': continue
             
-            provider_has_boards_for_type = pd.Series(False, index=df.index)
-            p_prefix = p_name.upper()
+            # Check if this provider has any boards of the filtered type (or any type if boardType filter is 'all')
+            provider_has_relevant_boards_condition = pd.Series(False, index=df.index)
+            p_prefix_metric = p_name_metric.upper()
 
-            board_type_filter = filters.boardType if filters.boardType and filters.boardType != 'all' else 'all'
-
-            if board_type_filter == 'dealer' or board_type_filter == 'all':
-                col = f"{p_prefix}_NAME_BOARD"
-                if col in df.columns: provider_has_boards_for_type = provider_has_boards_for_type | (df[col].fillna(0) > 0)
-            if board_type_filter == 'tin' or board_type_filter == 'all':
-                col = f"{p_prefix}_TIN_BOARD"
-                if col in df.columns: provider_has_boards_for_type = provider_has_boards_for_type | (df[col].fillna(0) > 0)
-            if board_type_filter == 'vertical' or board_type_filter == 'all':
-                col = f"{p_prefix}_SIDE_BOARD"
-                if col in df.columns: provider_has_boards_for_type = provider_has_boards_for_type | (df[col].fillna(0) > 0)
+            for suffix_metric in board_suffixes_map.get(board_type_filter, []): # Use already determined suffixes_to_check
+                col_metric = f"{p_prefix_metric}{suffix_metric}"
+                if col_metric in df.columns:
+                    provider_has_relevant_boards_condition = provider_has_relevant_boards_condition | (pd.to_numeric(df[col_metric], errors='coerce').fillna(0) > 0)
             
-            final_provider_counts[p_name].update(df[provider_has_boards_for_type]['PROFILE_ID'].dropna().unique())
+            # Update count with unique PROFILE_IDs from the df rows that satisfy the condition for this provider
+            final_provider_counts[p_name_metric].update(df[provider_has_relevant_boards_condition]['PROFILE_ID'].dropna().unique())
 
     provider_metrics_list = [
         ProviderMetric(provider=p_name, count=len(unique_profile_ids))
         for p_name, unique_profile_ids in final_provider_counts.items()
     ]
-    
+
     return FetchBoardsResponse(
         data=board_data_list,
-        count=len(board_data_list), # Number of individual board entries matching filters
+        count=len(board_data_list),
         providerMetrics=provider_metrics_list
     )

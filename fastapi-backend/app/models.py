@@ -1,5 +1,5 @@
 # fastapi-backend/app/models.py
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from typing import List, Optional, Tuple, Any, Dict
 
 class FilterOption(BaseModel):
@@ -16,11 +16,8 @@ class Retailer(BaseModel):
     district: Optional[str] = None
 
 class BoardData(BaseModel):
-    # Core derived/key fields
-    id: str                   # Unique ID for the board entry (e.g., from IMAGE_REF_ID)
-    retailerId: Optional[str] = None # Corresponds to PROFILE_ID
-
-    # Raw data fields from your data source (board.csv)
+    id: str
+    retailerId: Optional[str] = None
     PROFILE_ID: Optional[str] = None
     PROFILE_NAME: Optional[str] = None
     PROVINCE: Optional[str] = None
@@ -30,12 +27,8 @@ class BoardData(BaseModel):
     SALES_DISTRICT: Optional[str] = None
     SALES_AREA: Optional[str] = None
     SALES_REGION: Optional[str] = None
-
-    # Board type and provider determined by backend logic for this specific entry
-    boardType: Optional[str] = "N/A" # Default if not determinable
-    provider: Optional[str] = "Unknown" # Default if not determinable
-
-    # Board counts (ensure these are numbers from your CSV or handled)
+    boardType: Optional[str] = "N/A"
+    provider: Optional[str] = "Unknown"
     DIALOG_NAME_BOARD: Optional[int] = Field(default=0)
     MOBITEL_NAME_BOARD: Optional[int] = Field(default=0)
     HUTCH_NAME_BOARD: Optional[int] = Field(default=0)
@@ -48,8 +41,7 @@ class BoardData(BaseModel):
     MOBITEL_TIN_BOARD: Optional[int] = Field(default=0)
     HUTCH_TIN_BOARD: Optional[int] = Field(default=0)
     AIRTEL_TIN_BOARD: Optional[int] = Field(default=0)
-    
-    originalBoardImageIdentifier: Optional[str] = None 
+    originalBoardImageIdentifier: Optional[str] = None
     detectedBoardImageIdentifier: Optional[str] = None
 
 class ProviderMetric(BaseModel):
@@ -64,18 +56,16 @@ class FetchBoardsResponse(BaseModel):
     providerMetrics: List[ProviderMetric]
 
 class BoardFiltersState(BaseModel):
-    boardType: Optional[str] = None
-    provider: Optional[str] = None
-    salesRegion: Optional[str] = None 
-    salesDistrict: Optional[str] = None 
-    dsDivision: Optional[str] = None
-    retailerId: Optional[str] = None
+    boardType: Optional[str] = 'all'
+    provider: Optional[str] = 'all'
+    salesRegion: Optional[str] = 'all'
+    salesDistrict: Optional[str] = 'all'
+    dsDivision: Optional[str] = 'all'
+    retailerId: Optional[str] = 'all'
 
 class PosmData(BaseModel):
-    id: str                   
-    retailerId: Optional[str] = None        
-    
-    # Fields for table display as per your request
+    id: str
+    retailerId: Optional[str] = None
     PROFILE_NAME: Optional[str] = None
     PROVINCE: Optional[str] = None
     DISTRICT: Optional[str] = None
@@ -84,18 +74,14 @@ class PosmData(BaseModel):
     SALES_REGION: Optional[str] = None
     SALES_DISTRICT: Optional[str] = None
     SALES_AREA: Optional[str] = None
-
     DIALOG_AREA_PERCENTAGE: Optional[float] = Field(default=0.0)
     AIRTEL_AREA_PERCENTAGE: Optional[float] = Field(default=0.0)
     MOBITEL_AREA_PERCENTAGE: Optional[float] = Field(default=0.0)
     HUTCH_AREA_PERCENTAGE: Optional[float] = Field(default=0.0)
-    
-    # These fields are no longer primary for table display but might be used by other logic (e.g., PercentageBar)
-    provider: Optional[str] = "Unknown" # Main provider for the POSM entry (can be derived)
-    visibilityPercentage: Optional[float] = Field(default=0.0) # Overall visibility (can be derived)
-
-    originalPosmImageIdentifier: Optional[str] = None 
-    detectedPosmImageIdentifier: Optional[str] = None 
+    provider: Optional[str] = "Unknown"
+    visibilityPercentage: Optional[float] = Field(default=0.0)
+    originalPosmImageIdentifier: Optional[str] = None
+    detectedPosmImageIdentifier: Optional[str] = None
 
 class FetchPosmGeneralResponse(BaseModel):
     data: List[PosmData]
@@ -103,15 +89,29 @@ class FetchPosmGeneralResponse(BaseModel):
     providerMetrics: List[ProviderMetric]
 
 class PosmGeneralFiltersState(BaseModel):
-    provider: Optional[str] = None
-    province: Optional[str] = None
-    district: Optional[str] = None
-    dsDivision: Optional[str] = None
-    retailerId: Optional[str] = None
-    posmStatus: Optional[str] = None
-    visibilityRange: Optional[Tuple[float, float]] = Field(default=(0, 100))
+    provider: Optional[str] = 'all'
+    province: Optional[str] = 'all'
+    district: Optional[str] = 'all'
+    dsDivision: Optional[str] = 'all'
+    retailerId: Optional[str] = 'all'
+    posmStatus: Optional[str] = 'all' # 'all', 'increase', 'decrease'
+    visibilityRange: Optional[str] = None # Expected as 'min,max' string from query
 
-# --- Other models remain the same (GeoJSON, ImageInfo, PosmBatch, etc.) ---
+    @validator('visibilityRange', pre=True, always=True)
+    def parse_visibility_range(cls, v):
+        if isinstance(v, str):
+            try:
+                min_val, max_val = map(float, v.split(','))
+                return [min_val, max_val]
+            except ValueError:
+                raise ValueError("visibilityRange must be two comma-separated numbers")
+        elif isinstance(v, list) and len(v) == 2:
+            return v
+        elif v is None: # Allow None if not provided
+            return [0.0, 100.0] # Default if not provided or handle as truly optional
+        raise ValueError("Invalid visibilityRange format")
+
+
 class GeoJsonFeatureProperties(BaseModel):
     name: str
     value: Optional[float] = None
@@ -140,7 +140,7 @@ class PosmBatchShare(BaseModel):
     percentage: float
 
 class PosmBatchDetails(BaseModel):
-    image: str 
+    image: str
     shares: List[PosmBatchShare]
     maxCapturePhase: Optional[str] = None
 
