@@ -91,6 +91,21 @@ async def fetch_retailers_api(
     retailers_filtered_df.dropna(subset=['PROFILE_ID', 'LATITUDE', 'LONGITUDE'], inplace=True)
     unique_retailers_df = retailers_filtered_df.drop_duplicates(subset=['PROFILE_ID'])
 
+    # Create unique retailer list from the filtered board data
+    # Ensure necessary columns for Retailer model are present
+    required_cols = ['PROFILE_ID', 'PROFILE_NAME', 'LATITUDE', 'LONGITUDE']
+    if not all(col in retailers_df.columns for col in required_cols):
+        # Not enough data to form retailer objects if essential geo/id info is missing after filtering
+        # Or, could raise an error, but returning empty list might be safer for frontend
+        return []
+        # raise HTTPException(status_code=500, detail="Essential retailer columns missing after filtering.")
+
+    # Drop NaN for essential fields before creating Retailer objects
+    retailers_df.dropna(subset=['PROFILE_ID', 'LATITUDE', 'LONGITUDE'], inplace=True)
+    
+    # Create unique retailers based on PROFILE_ID
+    unique_retailers_df = retailers_df.drop_duplicates(subset=['PROFILE_ID'])
+
     output_retailers = []
     for _, row in unique_retailers_df.iterrows():
         province_val = row.get('PROVINCE') if 'PROVINCE' in row else row.get('SALES_REGION')
@@ -100,7 +115,7 @@ async def fetch_retailers_api(
 
         output_retailers.append(Retailer(
             id=str(row['PROFILE_ID']),
-            name=str(row.get('PROFILE_NAME', 'N/A')),
+            name=str(row.get('PROFILE_NAME', 'N/A')), # Default if PROFILE_NAME is missing
             latitude=float(row['LATITUDE']),
             longitude=float(row['LONGITUDE']),
             imageIdentifier=str(image_identifier_val) if pd.notna(image_identifier_val) else None,

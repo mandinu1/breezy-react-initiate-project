@@ -7,6 +7,8 @@ export interface FilterOption {
   label: string;
 }
 
+// mandinu1/breezy-react-initiate-project/breezy-react-initiate-project-0fa4c536d6929256228f28fa08a2914fae3eabac/frontend-retail-dashboard/types.ts
+// Original Retailer interface was duplicated, keeping one.
 export interface Retailer {
   id: string;
   name:string;
@@ -80,16 +82,19 @@ export interface PosmData {
   originalPosmImageIdentifier?: string; // S3_ARN from posm.csv
   detectedPosmImageIdentifier?: string; // INF_S3_ARN from posm.csv for the main detected object
 
-  [key: string]: any; // For flexibility if backend sends more fields not strictly typed here
+  originalPosmImageIdentifier?: string;
+  detectedPosmImageIdentifier?: string;
+
+  [key: string]: any; 
 }
 
 export interface ProviderConfig {
-  value: string; // for filter values
-  label: string; // for display in dropdowns
-  name: string;  // for display in metrics, can be same as label
-  key: string;   // unique key, e.g., 'dialog'
-  color: string; // hex color
-  logoUrl?: string; // URL for provider logo
+  value: string; 
+  label: string; 
+  name: string;  
+  key: string;   
+  color: string; 
+  logoUrl?: string; 
 }
 
 export interface ProviderMetric {
@@ -110,7 +115,7 @@ export interface GeoJsonFeature {
   type: "Feature";
   properties: { [key: string]: any };
   geometry: {
-    type: string; // e.g., "Polygon", "MultiPolygon"
+    type: string; 
     coordinates: any[];
   };
 }

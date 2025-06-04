@@ -2,149 +2,89 @@ from fastapi import APIRouter, Depends, Query
 from typing import List, Optional
 import pandas as pd
 
-from app.models import FilterOption
-from app.dependencies import get_boards_df, get_posm_df
+from app.models import FilterOption # Assuming FilterOption is in app.models
+from app.dependencies import get_boards_df, get_posm_df # Or a combined df
 
 router = APIRouter()
 
-PROVIDERS_CONFIG_OPTIONS_INTERNAL = [
-    {"value": "all", "name": "All"},
-    {"value": "dialog", "name": "Dialog"},
-    {"value": "mobitel", "name": "Mobitel"},
-    {"value": "airtel", "name": "Airtel"},
-    {"value": "hutch", "name": "Hutch"},
-]
-
-def get_provider_name_from_value_options(value: str) -> Optional[str]:
-    for p_config in PROVIDERS_CONFIG_OPTIONS_INTERNAL:
-        if p_config["value"] == value:
-            return p_config["name"]
-    return None
-
-def get_unique_options_from_df_options(df: pd.DataFrame, column_name: str) -> List[FilterOption]:
+def get_unique_options(df: pd.DataFrame, column_name: str, value_prefix: Optional[str] = None) -> List[FilterOption]:
     if df.empty or column_name not in df.columns:
         return []
-    unique_values = pd.Series(df[column_name].dropna().unique()).astype(str).sort_values().tolist()
+
+    unique_values = df[column_name].dropna().unique()
+    unique_values.sort()
+
     options = [
         FilterOption(
-            value=str(val).lower().replace(' ', '_'),
+            value=f"{value_prefix}_{str(val).lower().replace(' ', '_')}" if value_prefix else str(val).lower().replace(' ', '_'), 
             label=str(val)
         ) for val in unique_values if str(val).strip() != ""
     ]
-    return options
+    return [FilterOption(value="all", label=f"All {column_name.replace('_', ' ').title()}s")] + options
 
 @router.get("/options/provinces", response_model=List[FilterOption])
-async def get_province_options_api(
-    provider: Optional[str] = Query(None),
-    context: str = Query("board"), # 'board' or 'posm'
-    board_df: pd.DataFrame = Depends(get_boards_df),
-    posm_df: pd.DataFrame = Depends(get_posm_df)
+async def get_province_options( # Using SALES_REGION from board/posm data as "province" for filters
+    board_df: pd.DataFrame = Depends(get_boards_df) 
 ):
-    df_source = board_df if context == "board" else posm_df
-    if df_source.empty:
-        return []
-    
-    df_to_filter = df_source.copy()
+    # Decide which DataFrame is the source of truth for provinces or combine them
+    # For BoardView, it might be 'SALES_REGION' or 'PROVINCE'
+    # For PosmView, it might be 'PROVINCE' or 'SALES_REGION'
+    # Let's assume 'PROVINCE' exists and is preferred, fallback to 'SALES_REGION' if not
+    # For consistency with your frontend constants, let's try to use what's available.
+    # Your board.csv has PROVINCE and SALES_REGION. posm.csv has PROVINCE and SALES_REGION.
 
-    if provider and provider != 'all':
-        provider_name_actual = get_provider_name_from_value_options(provider)
-        if provider_name_actual:
-            # For POSM, filter by provider's area percentage > 0
-            if context == "posm" and f"{provider_name_actual.upper()}_AREA_PERCENTAGE" in df_to_filter.columns:
-                df_to_filter = df_to_filter[pd.to_numeric(df_to_filter[f"{provider_name_actual.upper()}_AREA_PERCENTAGE"], errors='coerce').fillna(0) > 0]
-            # For Board, check if any board type for this provider exists
-            elif context == "board":
-                provider_prefix = provider_name_actual.upper()
-                board_cols_for_provider = [f"{provider_prefix}_NAME_BOARD", f"{provider_prefix}_SIDE_BOARD", f"{provider_prefix}_TIN_BOARD"]
-                condition = pd.Series(False, index=df_to_filter.index)
-                for col in board_cols_for_provider:
-                    if col in df_to_filter.columns:
-                        condition = condition | (pd.to_numeric(df_to_filter[col], errors='coerce').fillna(0) > 0)
-                if condition.any(): # Only filter if some rows meet the condition
-                    df_to_filter = df_to_filter[condition]
-                else: # If no rows meet condition, it implies no data for this provider, so options might be empty or broad
-                    df_to_filter = pd.DataFrame(columns=df_to_filter.columns) # Return empty options essentially
+    # We'll use 'PROVINCE' from board_df as an example. Adjust if needed.
+    if 'PROVINCE' in board_df.columns:
+         return get_unique_options(board_df, "PROVINCE")
+    elif 'SALES_REGION' in board_df.columns: # Fallback for BoardView sales context
+         return get_unique_options(board_df, "SALES_REGION")
+    return [FilterOption(value="all", label="All Provinces")]
 
-
-    col_to_use = 'PROVINCE' if 'PROVINCE' in df_to_filter.columns else 'SALES_REGION'
-    if col_to_use and col_to_use in df_to_filter.columns:
-        return get_unique_options_from_df_options(df_to_filter, col_to_use)
-    return []
 
 @router.get("/options/districts", response_model=List[FilterOption])
-async def get_district_options_api(
-    provider: Optional[str] = Query(None),
-    province: Optional[str] = Query(None),
-    context: str = Query("board"),
-    board_df: pd.DataFrame = Depends(get_boards_df),
-    posm_df: pd.DataFrame = Depends(get_posm_df)
+async def get_district_options(
+    province: Optional[str] = Query(None), # This would be the 'value' from province FilterOption
+    board_df: pd.DataFrame = Depends(get_boards_df)
 ):
-    df_source = board_df if context == "board" else posm_df
-    if df_source.empty: return []
-    df_to_filter = df_source.copy()
+    # Similar logic: use 'DISTRICT' or 'SALES_DISTRICT'
+    # Filter board_df by province first if a province is provided
+    # The 'province' query parameter here should correspond to the 'value' of the selected province option
+    # e.g., 'western', 'central', etc.
 
-    # Filter by provider (similar logic to provinces)
-    if provider and provider != 'all':
-        provider_name_actual = get_provider_name_from_value_options(provider)
-        if provider_name_actual:
-            if context == "posm" and f"{provider_name_actual.upper()}_AREA_PERCENTAGE" in df_to_filter.columns:
-                 df_to_filter = df_to_filter[pd.to_numeric(df_to_filter[f"{provider_name_actual.upper()}_AREA_PERCENTAGE"], errors='coerce').fillna(0) > 0]
-            elif context == "board":
-                provider_prefix = provider_name_actual.upper()
-                board_cols_for_provider = [f"{provider_prefix}_NAME_BOARD", f"{provider_prefix}_SIDE_BOARD", f"{provider_prefix}_TIN_BOARD"]
-                condition = pd.Series(False, index=df_to_filter.index)
-                for col in board_cols_for_provider:
-                    if col in df_to_filter.columns: condition = condition | (pd.to_numeric(df_to_filter[col], errors='coerce').fillna(0) > 0)
-                if condition.any(): df_to_filter = df_to_filter[condition]
-                else: df_to_filter = pd.DataFrame(columns=df_to_filter.columns)
+    filtered_df = board_df.copy()
+    province_column_to_filter = None
+    if 'PROVINCE' in filtered_df.columns:
+        province_column_to_filter = 'PROVINCE'
+    elif 'SALES_REGION' in filtered_df.columns:
+        province_column_to_filter = 'SALES_REGION'
 
+    if province and province != "all" and province_column_to_filter:
+        # The 'province' value from query needs to match how values are stored or compared
+        # Assuming province values are like 'Western', 'Central'
+        # We need to map the incoming 'value' (e.g. 'western') to the actual data if they differ in case/formatting
+        actual_province_name = province.replace('_', ' ').title() # Example to match title case
+        # A more robust way would be to fetch the label for the value, or ensure values match data
 
-    province_col_actual = 'PROVINCE' if 'PROVINCE' in df_to_filter.columns else 'SALES_REGION'
-    if province and province != "all" and province_col_actual in df_to_filter.columns:
-        df_to_filter = df_to_filter[df_to_filter[province_col_actual].str.lower().replace(' ', '_', regex=False) == province.lower()]
+        # Find the label for the given province value to filter the dataframe accurately
+        # This assumes the province value sent from frontend is the 'value' field of FilterOption (e.g. 'western')
+        # and the dataframe contains 'Western'
+        # This part is tricky without knowing the exact mapping.
+        # For simplicity, let's assume direct match or simple transformation is enough for now.
 
-    district_col_actual = 'DISTRICT' if 'DISTRICT' in df_to_filter.columns else 'SALES_DISTRICT'
-    if district_col_actual and district_col_actual in df_to_filter.columns:
-        return get_unique_options_from_df_options(df_to_filter, district_col_actual)
-    return []
+        # Let's assume the province value passed is the one directly usable for filtering (e.g. already lowercased or matching df)
+        # Or, we could fetch the corresponding label from the provinces list if we had it here.
+        # To keep it simple, we'll assume a direct match attempt on a standardized column
 
-@router.get("/options/ds-divisions", response_model=List[FilterOption])
-async def get_ds_division_options_api(
-    provider: Optional[str] = Query(None),
-    province: Optional[str] = Query(None),
-    district: Optional[str] = Query(None),
-    context: str = Query("board"),
-    board_df: pd.DataFrame = Depends(get_boards_df),
-    posm_df: pd.DataFrame = Depends(get_posm_df)
-):
-    df_source = board_df if context == "board" else posm_df
-    if df_source.empty: return []
-    df_to_filter = df_source.copy()
-
-    # Filter by provider
-    if provider and provider != 'all':
-        provider_name_actual = get_provider_name_from_value_options(provider)
-        if provider_name_actual:
-            if context == "posm" and f"{provider_name_actual.upper()}_AREA_PERCENTAGE" in df_to_filter.columns:
-                 df_to_filter = df_to_filter[pd.to_numeric(df_to_filter[f"{provider_name_actual.upper()}_AREA_PERCENTAGE"], errors='coerce').fillna(0) > 0]
-            elif context == "board":
-                provider_prefix = provider_name_actual.upper()
-                board_cols_for_provider = [f"{provider_prefix}_NAME_BOARD", f"{provider_prefix}_SIDE_BOARD", f"{provider_prefix}_TIN_BOARD"]
-                condition = pd.Series(False, index=df_to_filter.index)
-                for col in board_cols_for_provider:
-                    if col in df_to_filter.columns: condition = condition | (pd.to_numeric(df_to_filter[col], errors='coerce').fillna(0) > 0)
-                if condition.any(): df_to_filter = df_to_filter[condition]
-                else: df_to_filter = pd.DataFrame(columns=df_to_filter.columns)
+        # Standardize before comparison:
+        df_province_column = filtered_df[province_column_to_filter].astype(str).str.lower().str.replace(' ', '_')
+        filtered_df = filtered_df[df_province_column == province]
 
 
-    province_col_actual = 'PROVINCE' if 'PROVINCE' in df_to_filter.columns else 'SALES_REGION'
-    if province and province != "all" and province_col_actual in df_to_filter.columns:
-        df_to_filter = df_to_filter[df_to_filter[province_col_actual].str.lower().replace(' ', '_', regex=False) == province.lower()]
+    if 'DISTRICT' in filtered_df.columns:
+        return get_unique_options(filtered_df, "DISTRICT")
+    elif 'SALES_DISTRICT' in filtered_df.columns: # Fallback
+        return get_unique_options(filtered_df, "SALES_DISTRICT")
+    return [FilterOption(value="all", label="All Districts")]
 
-    district_col_actual = 'DISTRICT' if 'DISTRICT' in df_to_filter.columns else 'SALES_DISTRICT'
-    if district and district != "all" and district_col_actual in df_to_filter.columns:
-        df_to_filter = df_to_filter[df_to_filter[district_col_actual].str.lower().replace(' ', '_', regex=False) == district.lower()]
-    
-    if 'DS_DIVISION' in df_to_filter.columns:
-        return get_unique_options_from_df_options(df_to_filter, "DS_DIVISION")
-    return []
+# Add similar endpoints for /options/ds-divisions, /options/retailers
+# For retailers, your existing /retailers endpoint is already dynamic.

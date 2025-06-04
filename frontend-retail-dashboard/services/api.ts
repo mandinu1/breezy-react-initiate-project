@@ -150,6 +150,7 @@ export const fetchImageInfo = async (imageIdentifier: string): Promise<ImageInfo
      return { id: 'placeholder', url: '/assets/sample-retailer-placeholder.png', type: 'placeholder' };
   }
   try {
+    // The backend /image-info/{image_identifier} should handle S3 ARN or other IDs
     const response = await apiClient.get(`/image-info/${encodeURIComponent(imageIdentifier)}`);
     return response.data;
   } catch (error) {
