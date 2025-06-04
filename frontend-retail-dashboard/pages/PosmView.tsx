@@ -24,25 +24,26 @@ import {
     PROVIDER_FILTER_OPTIONS, 
     POSM_STATUSES, 
     PROVIDERS_CONFIG,
-} from '../constants'; // Removed PROVINCES, ALL_DISTRICTS_OPTIONS, etc.
+} from '../constants';
 import { 
     fetchPosmGeneral, 
     fetchRetailers, 
+    fetchRetailersForFilter,
     fetchGeoDistricts, 
     fetchAvailableBatches,
-    fetchProvinces,
-    fetchDistricts,
-    fetchDsDivisions 
+    fetchProvincesOptions,
+    fetchDistrictsOptions,
+    fetchDsDivisionsOptions 
 } from '../services/api';
 
-type PosmSubView = 'general' | 'district' | 'comparison';
+type PosmSubView = 'general' | 'district' | 'comparison'; // Corrected: added closing quote
 
 interface PosmViewProps {
   viewMode: ViewMode;
   setSidebarFilters: (element: React.ReactNode | null) => void;
 }
 
-const initialPosmViewFilters: PosmGeneralFiltersState = { // Renamed for clarity within this file
+const initialPosmViewFilters: PosmGeneralFiltersState = {
   provider: 'all',
   province: 'all',
   district: 'all',
@@ -142,6 +143,9 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
 
   const [selectedRetailerImageId, setSelectedRetailerImageId] = useState<string | undefined>(undefined);
   const isSalesView = viewMode === 'sales';
+  const geoContext = isSalesView ? 'sales' : 'admin';
+  const provinceLabel = isSalesView ? "Sales Region" : "Province";
+  const districtLabel = isSalesView ? "Sales District" : "District";
 
   const handleGeneralFilterChange = useCallback((filterName: keyof PosmGeneralFiltersState, value: string | [number, number]) => {
     setCurrentGeneralFilters(prev => {
@@ -172,58 +176,51 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
         } else if (filterName === 'district') {
             newFilters.dsDivision = 'all';
         }
-        // When geo filters for comparison change, retailer selection should ideally reset or re-validate.
-        // This is handled by the useEffect that fetches comparisonRetailerOptions
         return newFilters;
     });
   }, []);
 
-  // Fetching logic for General/District sub-view filters
   useEffect(() => {
-    fetchProvinces(currentGeneralFilters.provider, isSalesView).then(options => {
-        setGeneralProvinceOptions([{value: 'all', label: isSalesView ? 'All Sales Regions' : 'All Provinces'}, ...options]);
+    fetchProvincesOptions(currentGeneralFilters.provider, geoContext).then(options => {
+        setGeneralProvinceOptions([{value: 'all', label: `All ${provinceLabel}s`}, ...options]);
     });
-  }, [currentGeneralFilters.provider, isSalesView]);
+  }, [currentGeneralFilters.provider, geoContext, provinceLabel]);
 
   useEffect(() => {
     const { provider, province } = currentGeneralFilters;
-    const provinceLabel = isSalesView ? 'All Sales Districts' : 'All Districts';
+    setGeneralDistrictOptions([{ value: 'all', label: `All ${districtLabel}s` }]);
     if (province && province !== 'all') {
       setGeneralDistrictOptions([{ value: 'all', label: 'Loading...' }]);
-      fetchDistricts(provider, province, isSalesView).then(options => {
-        setGeneralDistrictOptions([{value: 'all', label: provinceLabel}, ...options]);
+      fetchDistrictsOptions(provider, province, geoContext).then(options => {
+        setGeneralDistrictOptions([{value: 'all', label: `All ${districtLabel}s`}, ...options]);
       });
-    } else {
-      setGeneralDistrictOptions([{ value: 'all', label: provinceLabel }]);
     }
-  }, [currentGeneralFilters.provider, currentGeneralFilters.province, isSalesView]);
+  }, [currentGeneralFilters.provider, currentGeneralFilters.province, geoContext, districtLabel]);
 
   useEffect(() => {
     const { provider, province, district } = currentGeneralFilters;
+    setGeneralDsDivisionOptions([{ value: 'all', label: 'All DS Divisions' }]);
     if (district && district !== 'all') {
       setGeneralDsDivisionOptions([{ value: 'all', label: 'Loading...' }]);
-      fetchDsDivisions(provider, province, district).then(options => {
+      fetchDsDivisionsOptions(provider, province, district).then(options => {
         setGeneralDsDivisionOptions([{value: 'all', label: 'All DS Divisions'}, ...options]);
       });
-    } else {
-      setGeneralDsDivisionOptions([{ value: 'all', label: 'All DS Divisions' }]);
     }
   }, [currentGeneralFilters.provider, currentGeneralFilters.province, currentGeneralFilters.district]);
 
   useEffect(() => {
     const { provider, province, district, dsDivision } = currentGeneralFilters;
-    const geoFiltersForRetailers: any = {};
-    if (provider !== 'all') geoFiltersForRetailers.provider = provider;
-    if (province !== 'all') geoFiltersForRetailers.province = province;
-    if (district !== 'all') geoFiltersForRetailers.district = district;
-    if (dsDivision !== 'all') geoFiltersForRetailers.dsDivision = dsDivision;
+    const filtersForRetailer: any = { geoContext };
+    if (provider !== 'all') filtersForRetailer.provider = provider;
+    if (province !== 'all') filtersForRetailer.province = province;
+    if (district !== 'all') filtersForRetailer.district = district;
+    if (dsDivision !== 'all') filtersForRetailer.dsDivision = dsDivision;
     
     setGeneralRetailerOptions([{ value: 'all', label: 'Loading Retailers...' }]);
-    fetchRetailers(geoFiltersForRetailers).then(data => {
-        const options = data.map(r => ({ value: r.id, label: `${r.id} - ${r.name}` }));
+    fetchRetailersForFilter(filtersForRetailer).then(options => {
         setGeneralRetailerOptions([{value: 'all', label: 'All Retailers'}, ...options]);
     });
-  }, [currentGeneralFilters.provider, currentGeneralFilters.province, currentGeneralFilters.district, currentGeneralFilters.dsDivision]);
+  }, [currentGeneralFilters.provider, currentGeneralFilters.province, currentGeneralFilters.district, currentGeneralFilters.dsDivision, geoContext]);
 
   const fetchDataForGeneralSubView = useCallback(async () => {
     setIsLoading(true);
@@ -234,8 +231,13 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
       setPosmDataCount(count);
       setProviderPosmMetrics(providerMetrics);
 
-      const retailerLocationFilters = { ...currentGeneralFilters };
-      const retailersForMap = await fetchRetailers(retailerLocationFilters);
+      const retailerLocationFilters: any = { ...currentGeneralFilters };
+      if (isSalesView) {
+        retailerLocationFilters.salesRegion = currentGeneralFilters.province; // Map to what backend might expect if different
+        retailerLocationFilters.salesDistrict = currentGeneralFilters.district;
+      }
+      
+      const retailersForMap = await fetchRetailers(retailerLocationFilters); // Use original fetchRetailers for map
       setMapRetailers(retailersForMap);
       
       if (currentGeneralFilters.retailerId !== 'all') {
@@ -248,62 +250,60 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
         const geoData = await fetchGeoDistricts();
         setGeoJsonDistricts(geoData);
       }
-    } catch (err) { /* ... */ } 
-    finally { setIsLoading(false); }
-  }, [currentGeneralFilters, subView]);
+    } catch (err: any) { 
+        console.error("Failed to fetch POSM data:", err);
+        setError(err.message || "Failed to load POSM data.");
+        setSelectedRetailerImageId(undefined);
+    } finally { setIsLoading(false); }
+  }, [currentGeneralFilters, subView, isSalesView]);
 
   const resetGeneralFilters = useCallback(() => {
     setCurrentGeneralFilters(initialPosmViewFilters);
     setSelectedRetailerImageId(undefined);
   }, []);
 
-  // Comparison view logic
   const resetComparisonFilters = useCallback(() => {
     setComparisonGeoFilters(initialComparisonGeoFilters);
     setComparisonRetailerId('all');
     setAvailableBatches([]); 
     setIsLoadingRetailersForComparison(true);
-    fetchRetailers({})
-        .then(retailers => {
-            setComparisonRetailerOptions([{value: 'all', label: 'All Retailers'}, ...retailers.map(r => ({value: r.id, label: `${r.id} - ${r.name}`}))]);
-        })
-        .catch(err => { /* ... */ })
+    fetchRetailersForFilter({}) // Using fetchRetailersForFilter as it returns FilterOption[]
+        .then(setComparisonRetailerOptions)
+        .catch(err => { console.error("Failed to fetch retailers for comparison reset:", err); setError("Failed to load retailer options.");})
         .finally(() => setIsLoadingRetailersForComparison(false));
   }, []);
   
   useEffect(() => {
     if (subView === 'comparison') {
-      fetchProvinces(undefined, isSalesView).then(options => {
-          setComparisonProvinceOptions([{ value: 'all', label: isSalesView ? 'All Sales Regions' : 'All Provinces' }, ...options]);
+      fetchProvincesOptions(undefined, geoContext).then(options => {
+          setComparisonProvinceOptions([{ value: 'all', label: `All ${provinceLabel}s` }, ...options]);
       });
     }
-  }, [subView, isSalesView]);
+  }, [subView, geoContext, provinceLabel]);
 
   useEffect(() => {
     if (subView === 'comparison') {
       const { province } = comparisonGeoFilters;
-      const label = isSalesView ? 'All Sales Districts' : 'All Districts';
+      const label = `All ${districtLabel}s`;
+      setComparisonDistrictOptions([{ value: 'all', label: label }]);
       if (province && province !== 'all') {
         setComparisonDistrictOptions([{ value: 'all', label: 'Loading...' }]);
-        fetchDistricts(undefined, province, isSalesView).then(options => {
+        fetchDistrictsOptions(undefined, province, geoContext).then(options => {
           setComparisonDistrictOptions([{ value: 'all', label: label }, ...options]);
         });
-      } else {
-        setComparisonDistrictOptions([{ value: 'all', label: label }]);
       }
     }
-  }, [comparisonGeoFilters.province, subView, isSalesView]);
+  }, [comparisonGeoFilters.province, subView, geoContext, districtLabel]);
 
   useEffect(() => {
     if (subView === 'comparison') {
       const { province, district } = comparisonGeoFilters;
+      setComparisonDsDivisionOptions([{ value: 'all', label: 'All DS Divisions' }]);
       if (district && district !== 'all') {
         setComparisonDsDivisionOptions([{ value: 'all', label: 'Loading...' }]);
-        fetchDsDivisions(undefined, province, district).then(options => {
+        fetchDsDivisionsOptions(undefined, province, district).then(options => {
           setComparisonDsDivisionOptions([{ value: 'all', label: 'All DS Divisions' }, ...options]);
         });
-      } else {
-        setComparisonDsDivisionOptions([{ value: 'all', label: 'All DS Divisions' }]);
       }
     }
   }, [comparisonGeoFilters.province, comparisonGeoFilters.district, subView]);
@@ -312,38 +312,36 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
     if (subView === 'comparison') {
       setIsLoadingRetailersForComparison(true);
       const { province, district, dsDivision } = comparisonGeoFilters;
-      const currentCompFiltersForRetailer: any = {};
+      const currentCompFiltersForRetailer: any = { geoContext };
       if (province !== 'all') currentCompFiltersForRetailer.province = province;
       if (district !== 'all') currentCompFiltersForRetailer.district = district;
       if (dsDivision !== 'all') currentCompFiltersForRetailer.dsDivision = dsDivision;
 
-      fetchRetailers(currentCompFiltersForRetailer)
-        .then(retailers => {
-          const options = [{value: 'all', label: 'All Retailers'}, ...retailers.map(r => ({value: r.id, label: `${r.id} - ${r.name}`}))];
-          setComparisonRetailerOptions(options);
+      fetchRetailersForFilter(currentCompFiltersForRetailer)
+        .then(options => {
+          setComparisonRetailerOptions([{value: 'all', label: 'All Retailers'}, ...options]);
           if (comparisonRetailerId !== 'all' && !options.find(opt => opt.value === comparisonRetailerId)) {
             setComparisonRetailerId('all'); 
             setAvailableBatches([]); 
           }
         })
-        .catch(err => { /* ... */})
+        .catch(err => { console.error("Failed to fetch retailers for comparison sidebar:", err); setError("Failed to load retailer options for comparison."); setComparisonRetailerOptions([{ value: 'all', label: 'All Retailers' }]); })
         .finally(() => setIsLoadingRetailersForComparison(false));
     }
-  }, [comparisonGeoFilters, subView, comparisonRetailerId]);
+  }, [comparisonGeoFilters, subView, geoContext]);
 
   useEffect(() => {
     if (subView === 'comparison' && comparisonRetailerId && comparisonRetailerId !== 'all') {
       setIsLoading(true); 
       fetchAvailableBatches(comparisonRetailerId)
         .then(setAvailableBatches)
-        .catch(err => { /* ... */ })
+        .catch(err => { console.error("Failed to fetch batches:", err); setError("Failed to load batch options for comparison."); setAvailableBatches([]); })
         .finally(() => setIsLoading(false));
     } else {
       setAvailableBatches([]);
     }
   }, [comparisonRetailerId, subView]);
 
-  // Effect for setting sidebar filters UI
   useEffect(() => {
     if (subView === 'general' || subView === 'district') {
         const selectedProviderConfig = PROVIDERS_CONFIG.find(p => p.value === currentGeneralFilters.provider);
@@ -352,11 +350,7 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
         const showProviderSpecificFilters = currentGeneralFilters.provider !== 'all';
 
         const filterUI = (
-            <FilterPanel 
-                title={`${subView.charAt(0).toUpperCase() + subView.slice(1)} POSM Filters`} 
-                onApplyFilters={fetchDataForGeneralSubView} 
-                onResetFilters={resetGeneralFilters}
-            >
+            <FilterPanel title={`${subView.charAt(0).toUpperCase() + subView.slice(1)} POSM Filters`} onApplyFilters={fetchDataForGeneralSubView} onResetFilters={resetGeneralFilters}>
                 <SelectDropdown label="Provider" options={PROVIDER_FILTER_OPTIONS} value={currentGeneralFilters.provider} onChange={(e) => handleGeneralFilterChange('provider', e.target.value)} />
                 {showProviderSpecificFilters && subView === 'general' && (
                   <>
@@ -364,31 +358,20 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
                     <RangeSlider label={DEFAULT_VISIBILITY_PERCENTAGE_LABEL} min={0} max={100} initialValues={currentGeneralFilters.visibilityRange} onChangeCommitted={handleVisibilityRangeChange} />
                   </>
                 )}
-                <SelectDropdown label={isSalesView ? "Sales Region" : "Province"} options={generalProvinceOptions} value={currentGeneralFilters.province} onChange={(e) => handleGeneralFilterChange('province', e.target.value)} disabled={currentGeneralFilters.provider === 'all' && generalProvinceOptions.length <=1 }/>
-                <SelectDropdown label={isSalesView ? "Sales District" : "District"} options={generalDistrictOptions} value={currentGeneralFilters.district} onChange={(e) => handleGeneralFilterChange('district', e.target.value)} disabled={currentGeneralFilters.province === 'all' && generalDistrictOptions.length <= 1}/>
+                <SelectDropdown label={provinceLabel} options={generalProvinceOptions} value={currentGeneralFilters.province} onChange={(e) => handleGeneralFilterChange('province', e.target.value)} disabled={currentGeneralFilters.provider === 'all' && generalProvinceOptions.length <=1 }/>
+                <SelectDropdown label={districtLabel} options={generalDistrictOptions} value={currentGeneralFilters.district} onChange={(e) => handleGeneralFilterChange('district', e.target.value)} disabled={currentGeneralFilters.province === 'all' && generalDistrictOptions.length <= 1}/>
                 <SelectDropdown label="DS Division" options={generalDsDivisionOptions} value={currentGeneralFilters.dsDivision} onChange={(e) => handleGeneralFilterChange('dsDivision', e.target.value)} disabled={currentGeneralFilters.district === 'all' && generalDsDivisionOptions.length <= 1}/>
-                <SelectDropdown 
-                    label="Retailer Name/ID" 
-                    options={generalRetailerOptions} 
-                    value={currentGeneralFilters.retailerId} 
-                    onChange={(e) => handleGeneralFilterChange('retailerId', e.target.value)} 
-                    disabled={isLoading || (currentGeneralFilters.provider === 'all' && currentGeneralFilters.province === 'all' && currentGeneralFilters.district === 'all' && currentGeneralFilters.dsDivision === 'all' && generalRetailerOptions.length <=1 )}
-                />
+                <SelectDropdown label="Retailer Name/ID" options={generalRetailerOptions} value={currentGeneralFilters.retailerId} onChange={(e) => handleGeneralFilterChange('retailerId', e.target.value)} disabled={isLoading || (currentGeneralFilters.provider === 'all' && currentGeneralFilters.province === 'all' && currentGeneralFilters.district === 'all' && currentGeneralFilters.dsDivision === 'all' && generalRetailerOptions.length <=1 )}/>
             </FilterPanel>
         );
         setSidebarFilters(filterUI);
     } else if (subView === 'comparison') {
         const comparisonFilterUI = ( 
             <FilterPanel title="Comparison Filters" onApplyFilters={() => {}} onResetFilters={resetComparisonFilters} >
-                <SelectDropdown label={isSalesView ? "Sales Region" : "Province"} options={comparisonProvinceOptions} value={comparisonGeoFilters.province} onChange={(e) => handleComparisonGeoFilterChange('province', e.target.value)} />
-                <SelectDropdown label={isSalesView ? "Sales District" : "District"} options={comparisonDistrictOptions} value={comparisonGeoFilters.district} onChange={(e) => handleComparisonGeoFilterChange('district', e.target.value)} disabled={comparisonGeoFilters.province === 'all' && comparisonDistrictOptions.length <= 1} />
+                <SelectDropdown label={provinceLabel} options={comparisonProvinceOptions} value={comparisonGeoFilters.province} onChange={(e) => handleComparisonGeoFilterChange('province', e.target.value)} />
+                <SelectDropdown label={districtLabel} options={comparisonDistrictOptions} value={comparisonGeoFilters.district} onChange={(e) => handleComparisonGeoFilterChange('district', e.target.value)} disabled={comparisonGeoFilters.province === 'all' && comparisonDistrictOptions.length <= 1} />
                 <SelectDropdown label="DS Division" options={comparisonDsDivisionOptions} value={comparisonGeoFilters.dsDivision} onChange={(e) => handleComparisonGeoFilterChange('dsDivision', e.target.value)} disabled={comparisonGeoFilters.district === 'all' && comparisonDsDivisionOptions.length <= 1}/>
-                <SelectDropdown 
-                    label="Retailer Name/ID" 
-                    options={comparisonRetailerOptions} 
-                    value={comparisonRetailerId} 
-                    onChange={(e) => setComparisonRetailerId(e.target.value)} 
-                    disabled={isLoadingRetailersForComparison || (comparisonGeoFilters.province === 'all' && comparisonGeoFilters.district === 'all' && comparisonGeoFilters.dsDivision === 'all' && comparisonRetailerOptions.length <= 1)} />
+                <SelectDropdown label="Retailer Name/ID" options={comparisonRetailerOptions} value={comparisonRetailerId} onChange={(e) => setComparisonRetailerId(e.target.value)} disabled={isLoadingRetailersForComparison || (comparisonGeoFilters.province === 'all' && comparisonGeoFilters.district === 'all' && comparisonGeoFilters.dsDivision === 'all' && comparisonRetailerOptions.length <= 1)} />
                 {isLoadingRetailersForComparison && <LoadingSpinner size="sm" message="Loading retailers..." />}
             </FilterPanel>
         );
@@ -398,7 +381,7 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
     }
     return () => { setSidebarFilters(null); };
   }, [
-    subView, currentGeneralFilters, viewMode, isSalesView,
+    subView, currentGeneralFilters, viewMode, isSalesView, provinceLabel, districtLabel,
     handleGeneralFilterChange, handleVisibilityRangeChange, 
     comparisonGeoFilters, comparisonRetailerId, comparisonRetailerOptions,
     generalRetailerOptions, handleComparisonGeoFilterChange, 
@@ -424,7 +407,6 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
     if (error && subView !== 'comparison') {
         return <ErrorMessage message={error} />;
     }
-
     switch (subView) {
       case 'general':
         return (
@@ -440,26 +422,14 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
                 <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-3">Provider POSM Visibility</h3>
                 {providerPosmMetrics.map(metric => {
                     const providerConfig = PROVIDERS_CONFIG.find(p => p.name === metric.provider);
-                    return (
-                        <PercentageBar 
-                            key={metric.provider} label={metric.provider} 
-                            percentage={metric.percentage || 0} 
-                            color={providerConfig?.color || '#718096'}
-                            providerLogoUrl={providerConfig?.logoUrl} />
-                    );
+                    return ( <PercentageBar key={metric.provider} label={metric.provider} percentage={metric.percentage || 0} color={providerConfig?.color || '#718096'} providerLogoUrl={providerConfig?.logoUrl} /> );
                 })}
             </div>
             <div className="bg-white dark:bg-dark-card p-4 rounded-lg shadow mb-6">
               <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-3">Retailer Image</h3>
               {currentGeneralFilters.retailerId !== 'all' && selectedRetailerImageId ? (
                 <ImageDisplay imageIdentifier={selectedRetailerImageId} altText={`Image for retailer ${currentGeneralFilters.retailerId}`} className="w-full max-w-md h-auto mx-auto" />
-              ) : (
-                 <p className="text-gray-500 dark:text-gray-400 text-center py-4">
-                    {currentGeneralFilters.retailerId !== 'all' && !selectedRetailerImageId 
-                        ? "Image not available for the selected retailer."
-                        : "Select a specific retailer to view their image."}
-                </p>
-              )}
+              ) : ( <p className="text-gray-500 dark:text-gray-400 text-center py-4"> {currentGeneralFilters.retailerId !== 'all' && !selectedRetailerImageId ? "Image not available for the selected retailer." : "Select a specific retailer to view their image."} </p> )}
             </div>
             <div className="bg-white dark:bg-dark-card p-4 rounded-lg shadow">
               <div className="flex justify-between items-center mb-3">
@@ -504,19 +474,8 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
       <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">POSM View ({viewMode === 'sales' ? 'Sales' : 'Admin'})</h2>
       <div className="flex space-x-1 border-b border-gray-300 dark:border-gray-700 mb-4">
         {(['general', 'district', 'comparison'] as PosmSubView[]).map(sv => (
-          <button
-            key={sv}
-            onClick={() => setSubView(sv)}
-            className={`px-3 py-2 font-medium text-sm capitalize rounded-t-md focus:outline-none transition-colors flex items-center justify-center
-              ${subView === sv 
-                ? 'bg-primary text-white dark:bg-secondary' 
-                : 'text-gray-600 hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-gray-600'
-            }`}
-            aria-current={subView === sv ? "page" : undefined}
-          >
-            {React.cloneElement(subViewIcons[sv], { 
-              className: `w-4 h-4 mr-2 ${subView === sv ? 'text-white' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300'}`
-            })}
+          <button key={sv} onClick={() => setSubView(sv)} className={`px-3 py-2 font-medium text-sm capitalize rounded-t-md focus:outline-none transition-colors flex items-center justify-center ${subView === sv ? 'bg-primary text-white dark:bg-secondary' : 'text-gray-600 hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-gray-600'}`} aria-current={subView === sv ? "page" : undefined} >
+            {React.cloneElement(subViewIcons[sv], { className: `w-4 h-4 mr-2 ${subView === sv ? 'text-white' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300'}`})}
             {`${sv.charAt(0).toUpperCase() + sv.slice(1)} View`}
           </button>
         ))}

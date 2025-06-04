@@ -1,4 +1,3 @@
-
 // Using string literals for enums to be more explicit and for easier debugging.
 export type ViewMode = 'sales' | 'admin';
 export type Page = 'board' | 'posm' | 'management';
@@ -8,6 +7,8 @@ export interface FilterOption {
   label: string;
 }
 
+// mandinu1/breezy-react-initiate-project/breezy-react-initiate-project-0fa4c536d6929256228f28fa08a2914fae3eabac/frontend-retail-dashboard/types.ts
+// Original Retailer interface was duplicated, keeping one.
 export interface Retailer {
   id: string;
   name:string;
@@ -18,7 +19,6 @@ export interface Retailer {
   district?: string; // Optional: for filtering
 }
 
-// mandinu1/breezy-react-initiate-project/breezy-react-initiate-project-653165f7b5ee7d64c670d05e8777412d3daa000e/types.ts
 export interface BoardData {
   id: string;                   // Unique ID for the board entry (e.g., IMAGE_REF_ID)
   retailerId: string;           // Corresponds to PROFILE_ID
@@ -34,8 +34,8 @@ export interface BoardData {
   SALES_REGION?: string;
 
   // Board type and provider determined by backend logic
-  boardType: string; 
-  provider: string;  
+  boardType: string;
+  provider: string;
 
   DIALOG_NAME_BOARD?: number;
   MOBITEL_NAME_BOARD?: number;
@@ -51,8 +51,8 @@ export interface BoardData {
   AIRTEL_TIN_BOARD?: number;
 
   // For Dual Image Display (if you plan to use specific board images)
-  originalBoardImageIdentifier?: string; 
-  detectedBoardImageIdentifier?: string; 
+  originalBoardImageIdentifier?: string;
+  detectedBoardImageIdentifier?: string;
   
   [key: string]: any; // Allows any other properties if needed for full flexibility
 }
@@ -61,17 +61,6 @@ export interface PosmData {
   id: string;                   // Unique ID for the POSM entry
   retailerId: string;           // Corresponds to PROFILE_ID
   
-  // Fields to be REMOVED from display as per your request:
-  // provider: string;          // This was "Main Provider"
-  // visibilityPercentage: number; // This was "Overall Visibility %"
-
-  // Existing percentage columns (these are fine)
-  DIALOG_AREA_PERCENTAGE?: number;
-  AIRTEL_AREA_PERCENTAGE?: number;
-  MOBITEL_AREA_PERCENTAGE?: number;
-  HUTCH_AREA_PERCENTAGE?: number;
-
-  // Fields to ADD to display as per your request:
   PROFILE_NAME?: string;
   PROVINCE?: string;
   DISTRICT?: string;
@@ -79,36 +68,42 @@ export interface PosmData {
   GN_DIVISION?: string;
   SALES_REGION?: string;
   SALES_DISTRICT?: string;
-  SALES_AREA?: string;      // Make sure this column exists in your posm.csv and is sent by backend
+  SALES_AREA?: string;
 
-  // Retain these for other potential uses, even if not in table
-  provider?: string; // Still useful for filtering or other logic
-  visibilityPercentage?: number; // Still useful for filtering or other logic
+  DIALOG_AREA_PERCENTAGE?: number;
+  AIRTEL_AREA_PERCENTAGE?: number;
+  MOBITEL_AREA_PERCENTAGE?: number;
+  HUTCH_AREA_PERCENTAGE?: number;
 
+  provider?: string; 
+  visibilityPercentage?: number; 
 
-  [key: string]: any; // For flexibility if backend sends more fields not strictly typed here
+  originalPosmImageIdentifier?: string;
+  detectedPosmImageIdentifier?: string;
+
+  [key: string]: any; 
 }
 
 export interface ProviderConfig {
-  value: string; // for filter values
-  label: string; // for display in dropdowns
-  name: string;  // for display in metrics, can be same as label
-  key: string;   // unique key, e.g., 'dialog'
-  color: string; // hex color
-  logoUrl?: string; // URL for provider logo
+  value: string; 
+  label: string; 
+  name: string;  
+  key: string;   
+  color: string; 
+  logoUrl?: string; 
 }
 
 export interface ProviderMetric {
   provider: string;
   count?: number;
   percentage?: number;
-  logoUrl?: string; // Optional: To carry logo URL if needed for display with metric
+  logoUrl?: string; 
 }
 
 export interface ImageInfo {
   id: string;
   url: string; // URL to the image
-  type: 'original' | 'detected'; // Example type
+  type: 'original' | 'detected' | 'placeholder' | 'error_placeholder' | 's3_presigned' | 'original_mock'; // Updated to include new types
 }
 
 // GeoJSON related types (simplified)
@@ -116,7 +111,7 @@ export interface GeoJsonFeature {
   type: "Feature";
   properties: { [key: string]: any };
   geometry: {
-    type: string; // e.g., "Polygon", "MultiPolygon"
+    type: string; 
     coordinates: any[];
   };
 }
@@ -129,8 +124,8 @@ export interface GeoJsonCollection {
 export interface BoardFiltersState {
   boardType: string;
   provider: string;
-  salesRegion: string; // or province
-  salesDistrict: string; // or district
+  salesRegion: string; 
+  salesDistrict: string; 
   dsDivision: string;
   retailerId: string;
 }
@@ -141,8 +136,8 @@ export interface PosmGeneralFiltersState {
   district: string;
   dsDivision: string;
   retailerId:string;
-  posmStatus: string; // 'All', 'Increase', 'Decrease'
-  visibilityRange: [number, number]; // Changed to be non-optional, will default to [0, 100]
+  posmStatus: string; 
+  visibilityRange: [number, number]; 
 }
 
 // Types for POSM Comparison
@@ -154,7 +149,7 @@ export interface PosmBatchShare {
 export interface PosmBatchDetails {
   image: string;
   shares: PosmBatchShare[];
-  maxCapturePhase?: string; // Added for Batch 2
+  maxCapturePhase?: string; 
 }
 
 export interface PosmComparisonData {
@@ -162,18 +157,4 @@ export interface PosmComparisonData {
   batch2: PosmBatchDetails;
   differences: { provider: string; diff: number }[];
 }
-export interface Retailer {
-  id: string;
-  name: string;
-  latitude: number;
-  longitude: number;
-  imageIdentifier?: string;
-  province?: string;
-  district?: string;
-}
-// For Leaflet, if needed, but usually imported from @types/leaflet
-// declare module 'leaflet' {
-//   interface MapOptions {
-//     // Add any custom options if extending Leaflet
-//   }
-// }
+// Note: The Retailer interface was defined twice. I've kept one instance at the top.
