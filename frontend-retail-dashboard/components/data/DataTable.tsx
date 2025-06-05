@@ -1,10 +1,9 @@
 import React from 'react';
 
-// Simple table, for more complex needs consider react-table or similar
-
 interface ColumnDefinition {
   Header: string;
-  accessor: string; // Key in data objects
+  // The accessor can be a string key of the data object, or a function that receives the row and returns a value.
+  accessor: string | ((row: any) => React.ReactNode);
 }
 
 interface DataTableProps {
@@ -18,13 +17,13 @@ const DataTable: React.FC<DataTableProps> = ({ columns, data }) => {
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg shadow">
+    <div className="overflow-x-auto rounded-lg shadow-md border border-gray-200 dark:border-gray-700">
       <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-        <thead className="bg-gray-50 dark:bg-gray-700">
+        <thead className="bg-gray-50 dark:bg-gray-800">
           <tr>
-            {columns.map(column => (
+            {columns.map((column, index) => (
               <th
-                key={column.accessor}
+                key={index} // Use index for key as accessor can be a function
                 scope="col"
                 className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
               >
@@ -36,11 +35,18 @@ const DataTable: React.FC<DataTableProps> = ({ columns, data }) => {
         <tbody className="bg-white dark:bg-dark-card divide-y divide-gray-200 dark:divide-gray-700">
           {data.map((row, rowIndex) => (
             <tr key={rowIndex} className="hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
-              {columns.map(column => (
-                <td key={column.accessor} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
-                  {row[column.accessor] !== undefined && row[column.accessor] !== null ? String(row[column.accessor]) : '-'}
-                </td>
-              ))}
+              {columns.map((column, colIndex) => {
+                // CORRECTED LOGIC: Check if the accessor is a function or a string.
+                const cellData = typeof column.accessor === 'function'
+                    ? column.accessor(row)
+                    : row[column.accessor as keyof typeof row];
+
+                return (
+                  <td key={colIndex} className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 dark:text-gray-200">
+                    {cellData !== undefined && cellData !== null ? String(cellData) : ' - '}
+                  </td>
+                );
+              })}
             </tr>
           ))}
         </tbody>
