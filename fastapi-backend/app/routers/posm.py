@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional, Dict, Any, Tuple
 import pandas as pd
-import numpy as np # For np.nan comparison if needed
+import random
+import numpy as np
+
 
 from app.models import (
     FetchPosmGeneralResponse, PosmGeneralFiltersState, PosmData, ProviderMetric,
@@ -27,11 +29,11 @@ def get_provider_name_map_posm_router():
 
 def safe_float_convert_posm_router(value, default_value: Optional[float] = 0.0) -> Optional[float]:
     if pd.isna(value) or value == '':
-        return None # Pydantic will handle None for Optional fields
+        return None 
     try:
         return float(value)
     except (ValueError, TypeError):
-        return default_value # Or None if preferred for conversion errors
+        return default_value
 
 def safe_str_convert_posm_router(value) -> Optional[str]:
     if pd.isna(value):
@@ -40,7 +42,7 @@ def safe_str_convert_posm_router(value) -> Optional[str]:
 
 @router.get("/posm/general", response_model=FetchPosmGeneralResponse)
 async def fetch_posm_general_api(
-    filters: PosmGeneralFiltersState = Depends(), # Automatically uses the validator for visibilityRange
+    filters: PosmGeneralFiltersState = Depends(),
     posm_df_raw: pd.DataFrame = Depends(get_posm_df)
 ):
     if posm_df_raw.empty:
@@ -52,25 +54,22 @@ async def fetch_posm_general_api(
         
     provider_name_map_local = get_provider_name_map_posm_router()
 
-    # Apply Retailer ID filter first
     if filters.retailerId and filters.retailerId != 'all' and 'PROFILE_ID' in df.columns:
-        df['PROFILE_ID_STR'] = df['PROFILE_ID'].astype(str) # Ensure consistent type for comparison
+        df['PROFILE_ID_STR'] = df['PROFILE_ID'].astype(str)
         df = df[df['PROFILE_ID_STR'] == filters.retailerId]
         if df.empty: return FetchPosmGeneralResponse(data=[], count=0, providerMetrics=[])
     
-    # Geographic filters
     geo_col_map = {
         'province': ['PROVINCE', 'SALES_REGION'],
         'district': ['DISTRICT', 'SALES_DISTRICT'],
         'dsDivision': ['DS_DIVISION']
     }
     for filter_key, df_cols_options in geo_col_map.items():
-        filter_val = getattr(filters, filter_key, 'all') # Default to 'all' if not present
+        filter_val = getattr(filters, filter_key, 'all')
         if filter_val and filter_val != 'all':
             applied_geo_filter = False
             for df_col in df_cols_options:
                 if df_col in df.columns:
-                    # Ensure comparison is robust (case-insensitive, handle spaces)
                     df[f"{df_col}_LOWER_UNDERSCORE"] = df[df_col].astype(str).str.lower().str.replace(' ', '_', regex=False)
                     df = df[df[f"{df_col}_LOWER_UNDERSCORE"] == filter_val.lower()]
                     applied_geo_filter = True
@@ -79,7 +78,6 @@ async def fetch_posm_general_api(
                  df = pd.DataFrame(columns=df.columns) 
         if df.empty: return FetchPosmGeneralResponse(data=[], count=0, providerMetrics=[])
 
-    # Provider specific filters
     selected_provider_name_filter: Optional[str] = None
     if filters.provider and filters.provider != 'all':
         selected_provider_name_filter = provider_name_map_local.get(filters.provider)
@@ -90,49 +88,39 @@ async def fetch_posm_general_api(
         if provider_col_filter in df.columns:
             df = df[pd.to_numeric(df[provider_col_filter], errors='coerce').fillna(0) > 0]
         else:
-            df = pd.DataFrame(columns=df.columns) # Provider column doesn't exist
+            df = pd.DataFrame(columns=df.columns)
         if df.empty: return FetchPosmGeneralResponse(data=[], count=0, providerMetrics=[])
 
-        # POSM Status Filter (Dominant/Not Dominant)
         if filters.posmStatus and filters.posmStatus != 'all':
             if filters.posmStatus == 'increase': # Dominant
-                def is_dominant(row):
-                    selected_share = pd.to_numeric(row.get(provider_col_filter), errors='coerce').fillna(0)
-                    if selected_share == 0: return False # Cannot be dominant if share is 0
+                def is_dominant(row_dict): # Process dict row
+                    selected_share = pd.to_numeric(row_dict.get(provider_col_filter), errors='coerce').fillna(0)
+                    if selected_share == 0: return False
                     for other_p_name in PROVIDER_NAMES_FOR_COMPARISON:
                         if other_p_name == selected_provider_name_filter: continue
                         other_col = f"{other_p_name.upper()}_AREA_PERCENTAGE"
-                        other_share = pd.to_numeric(row.get(other_col), errors='coerce').fillna(0)
-                        if selected_share <= other_share: # Not strictly highest
+                        other_share = pd.to_numeric(row_dict.get(other_col), errors='coerce').fillna(0)
+                        if selected_share <= other_share:
                             return False
                     return True 
-                df = df[df.apply(is_dominant, axis=1)]
+                df = df[df.apply(lambda row: is_dominant(row.to_dict()), axis=1)]
 
             elif filters.posmStatus == 'decrease': # Not Dominant
-                def is_not_dominant(row):
-                    selected_share = pd.to_numeric(row.get(provider_col_filter), errors='coerce').fillna(0)
-                    # Must have some share to be "not dominant" but present
-                    if selected_share == 0: return False
-
-                    is_highest = True # Assume it's highest initially
+                def is_not_dominant(row_dict):
+                    selected_share = pd.to_numeric(row_dict.get(provider_col_filter), errors='coerce').fillna(0)
+                    if selected_share == 0: return False 
                     has_competitor_with_higher_or_equal_share = False
                     for other_p_name in PROVIDER_NAMES_FOR_COMPARISON:
                         if other_p_name == selected_provider_name_filter: continue
                         other_col = f"{other_p_name.upper()}_AREA_PERCENTAGE"
-                        other_share = pd.to_numeric(row.get(other_col), errors='coerce').fillna(0)
-                        if selected_share <= other_share and other_share > 0 : # Another provider is equal or higher (and present)
+                        other_share = pd.to_numeric(row_dict.get(other_col), errors='coerce').fillna(0)
+                        if selected_share <= other_share and other_share > 0 :
                             has_competitor_with_higher_or_equal_share = True
                             break 
-                    # "Not dominant" means it's present (checked by initial provider filter) AND it's not the uniquely highest.
-                    # Or, if another definition: it is present AND some OTHER provider has a higher share.
-                    # Let's go with: present, but not strictly highest among those present.
                     return has_competitor_with_higher_or_equal_share
-
-                df = df[df.apply(is_not_dominant, axis=1)]
+                df = df[df.apply(lambda row: is_not_dominant(row.to_dict()), axis=1)]
             if df.empty: return FetchPosmGeneralResponse(data=[], count=0, providerMetrics=[])
 
-        # Visibility Range Filter (only if status is 'all' and a specific provider is selected)
-        # The validator in PosmGeneralFiltersState ensures visibilityRange is List[float, float] or None
         if filters.posmStatus == 'all' and filters.visibilityRange and isinstance(filters.visibilityRange, list) and len(filters.visibilityRange) == 2:
             min_vis, max_vis = filters.visibilityRange
             if provider_col_filter in df.columns:
@@ -143,8 +131,8 @@ async def fetch_posm_general_api(
             if df.empty: return FetchPosmGeneralResponse(data=[], count=0, providerMetrics=[])
 
     posm_data_list: List[PosmData] = []
-    for rowIndex, row_series in df.iterrows(): # row is a Pandas Series
-        row = row_series.to_dict() # Convert to dict for easier .get() with default
+    for rowIndex, row_series in df.iterrows():
+        row = row_series.to_dict()
         main_provider_for_row_display = "Unknown"
         visibility_perc_for_row_display = 0.0
         
@@ -191,7 +179,11 @@ async def fetch_posm_general_api(
             if p_config_metric['name'] == "All": continue
             col_name_metric = f"{p_config_metric['name'].upper()}_AREA_PERCENTAGE"
             if col_name_metric in df.columns:
-                avg_perc = pd.to_numeric(df[col_name_metric], errors='coerce').fillna(0).mean()
+                # Calculate mean only on non-zero values or all values including zero?
+                # For average visibility, usually all values in filtered set are considered.
+                valid_shares = pd.to_numeric(df[col_name_metric], errors='coerce').dropna()
+                avg_perc = valid_shares.mean() if not valid_shares.empty else 0.0
+                
                 provider_metrics_list.append(ProviderMetric(
                     provider=p_config_metric['name'],
                     percentage=round(float(avg_perc), 1) if pd.notna(avg_perc) else 0.0
@@ -203,7 +195,6 @@ async def fetch_posm_general_api(
         providerMetrics=provider_metrics_list
     )
 
-# ... (Keep existing /posm/available-batches and /posm/comparison as they were, they seem okay)
 @router.get("/posm/available-batches/{profile_id}", response_model=List[FilterOption])
 async def fetch_available_batches_api(profile_id: str, posm_df_all_phases: pd.DataFrame = Depends(get_posm_df)):
     if posm_df_all_phases.empty or 'PROFILE_ID' not in posm_df_all_phases.columns or 'CAPTURE_PHASE' not in posm_df_all_phases.columns:
@@ -225,7 +216,7 @@ async def fetch_available_batches_api(profile_id: str, posm_df_all_phases: pd.Da
         else: available_options.append(FilterOption(value=f"capture_phase_{int(cp_float)}", label=f"Capture Phase {int(cp_float)}"))
     return available_options
 
-def mock_random_provider_shares_posm_router() -> List[PosmBatchShare]: # Renamed to avoid conflict
+def mock_random_provider_shares_posm_router() -> List[PosmBatchShare]:
     actual_providers = [p for p in PROVIDERS_CONFIG_API_POSM_ROUTER if p["key"] != "all"]
     if not actual_providers: return [PosmBatchShare(provider="Default", percentage=100.0)]
     num_to_select = random.randint(1, min(len(actual_providers), 4))
@@ -234,7 +225,21 @@ def mock_random_provider_shares_posm_router() -> List[PosmBatchShare]: # Renamed
     total = sum(shares_vals) if sum(shares_vals) > 0 else 1
     norm_shares = [round((s / total) * 100, 1) for s in shares_vals]
     current_sum = sum(norm_shares)
-    if norm_shares and abs(current_sum - 100.0) > 0.1: norm_shares[0] = round(norm_shares[0] + (100.0 - current_sum), 1)
+    if norm_shares and abs(current_sum - 100.0) > 0.1: 
+        diff = 100.0 - current_sum
+        norm_shares[0] = round(norm_shares[0] + diff, 1)
+        if norm_shares[0] < 0: # Basic correction if first goes negative
+            norm_shares[0] = 0 
+            # A more robust redistribution might be needed for complex cases
+            temp_sum = sum(ns for ns in norm_shares if ns > 0)
+            if temp_sum > 0: # Rescale others if possible
+                 for i in range(len(norm_shares)):
+                     if norm_shares[i] > 0:
+                         norm_shares[i] = round((norm_shares[i] / temp_sum) * 100, 1)
+            elif len(norm_shares) > 1 : # if all became 0, give it to one
+                 norm_shares[1 if len(norm_shares) > 1 else 0].percentage = 100.0
+
+
     return [PosmBatchShare(provider=sp["name"], percentage=ns) for sp, ns in zip(selected, norm_shares) if ns >=0]
 
 
@@ -250,13 +255,12 @@ async def fetch_posm_comparison_data_api(
     capture_phase_map = {
         'batch1_2023_q1': 1.0, 'batch2_2023_q2': 2.0, 'batch3_2023_q3': 3.0,
         'batch4_2023_q4': 4.0, 'batch5_2024_q1': 5.0
-    }
+    } # This should ideally be more dynamic or configurable
     
     available_batch_options = await fetch_available_batches_api(profileId, posm_df_all_phases)
     batch_labels_map = {opt.value: opt.label for opt in available_batch_options}
 
-
-    def get_shares_for_batch_comp(df: pd.DataFrame, current_profile_id: str, batch_id_str: str) -> Tuple[List[PosmBatchShare], Optional[str], Optional[str]]:
+    async def get_shares_for_batch_comp(df: pd.DataFrame, current_profile_id: str, batch_id_str: str) -> Tuple[List[PosmBatchShare], Optional[str], Optional[str]]:
         target_phase = capture_phase_map.get(batch_id_str)
         phase_label_disp = batch_labels_map.get(batch_id_str, batch_id_str)
 
@@ -271,16 +275,17 @@ async def fetch_posm_comparison_data_api(
         row = batch_data.iloc[0].to_dict()
         shares_list = []
         row_total_perc = 0
-        for p_conf in PROVIDER_NAMES_FOR_COMPARISON:
-            share_val = pd.to_numeric(row.get(f"{p_conf.upper()}_AREA_PERCENTAGE"), errors='coerce').fillna(0)
+        for p_conf_name in PROVIDER_NAMES_FOR_COMPARISON: # Use the list of names
+            share_val = pd.to_numeric(row.get(f"{p_conf_name.upper()}_AREA_PERCENTAGE"), errors='coerce').fillna(0)
             if share_val > 0:
-                shares_list.append(PosmBatchShare(provider=p_conf, percentage=round(share_val, 1)))
+                shares_list.append(PosmBatchShare(provider=p_conf_name, percentage=round(share_val, 1)))
                 row_total_perc += share_val
         
-        if row_total_perc > 0 and (row_total_perc < 99.0 or row_total_perc > 101.0) and shares_list:
+        if row_total_perc > 0 and (abs(row_total_perc - 100.0) > 1.0) and shares_list: # Check if sum is far from 100
             shares_list = [PosmBatchShare(provider=s.provider, percentage=round((s.percentage / row_total_perc) * 100, 1)) for s in shares_list]
             current_sum_norm = sum(s.percentage for s in shares_list)
-            if shares_list and abs(current_sum_norm - 100.0) > 0.1: shares_list[0].percentage = round(shares_list[0].percentage + (100.0 - current_sum_norm),1)
+            if shares_list and abs(current_sum_norm - 100.0) > 0.1: 
+                shares_list[0].percentage = round(shares_list[0].percentage + (100.0 - current_sum_norm),1)
 
         img_s3 = safe_str_convert_posm_router(row.get('S3_ARN'))
         img_seed_data = f"{current_profile_id}_{target_phase}_{img_s3.split('/')[-1] if img_s3 else batch_id_str}"
@@ -288,8 +293,8 @@ async def fetch_posm_comparison_data_api(
         
         return shares_list if shares_list else mock_random_provider_shares_posm_router(), img_url, phase_label_disp
 
-    b1_shares, b1_img, _ = await get_shares_for_batch_comp(posm_df_all_phases, profileId, batch1Id) # await here
-    b2_shares, b2_img, b2_phase_label_disp = await get_shares_for_batch_comp(posm_df_all_phases, profileId, batch2Id) # await here
+    b1_shares, b1_img, _ = await get_shares_for_batch_comp(posm_df_all_phases, profileId, batch1Id)
+    b2_shares, b2_img, b2_phase_label_disp = await get_shares_for_batch_comp(posm_df_all_phases, profileId, batch2Id)
     
     diffs: List[Dict[str, Any]] = []
     all_providers_comp = set(s.provider for s in b1_shares) | set(s.provider for s in b2_shares)
