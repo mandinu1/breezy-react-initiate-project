@@ -1,4 +1,3 @@
-// mandinu1/breezy-react-initiate-project/breezy-react-initiate-project-0fa4c536d6929256228f28fa08a2914fae3eabac/frontend-retail-dashboard/pages/PosmView.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { ViewMode, PosmGeneralFiltersState, PosmData, ProviderMetric, Retailer, FilterOption, GeoJsonCollection } from '../types';
 import FilterPanel from '../components/sidebar/FilterPanel';
@@ -196,13 +195,15 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
     } finally { setIsLoading(false); }
   }, [subView, isSalesView]);
 
+  // ** CORRECTED HOOK FOR INITIAL DATA LOAD **
   useEffect(() => {
+    // This hook runs only once when the component mounts.
     fetchTotalRetailerCountForPosm();
-    if (subView === 'general' || subView === 'district') {
-        fetchDataForGeneralSubView(initialPosmViewFilters);
-    }
+    // It fetches data for the default view ('general') with default filters ('all').
+    fetchDataForGeneralSubView(initialPosmViewFilters);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchTotalRetailerCountForPosm, subView]);
+  }, []); // Empty dependency array ensures this runs only ONCE.
+
 
   const handleGeneralFilterChange = useCallback((filterName: keyof PosmGeneralFiltersState, value: string | [number, number]) => {
     setCurrentGeneralFilters(prev => {
@@ -225,6 +226,7 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
     handleGeneralFilterChange('visibilityRange', values);
   }, [handleGeneralFilterChange]);
 
+  // Dynamic filter options fetching
   useEffect(() => {
     setIsLoadingOptions(prev => ({...prev, provinces: true}));
     fetchProvinces(currentGeneralFilters.provider, isSalesView, 'posm').then(options => {
@@ -275,6 +277,7 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
     fetchDataForGeneralSubView(initialPosmViewFilters);
   }, [fetchDataForGeneralSubView]);
 
+  // --- Comparison View Logic (unchanged from previous version) ---
   const handleComparisonGeoFilterChange = useCallback((filterName: keyof typeof initialComparisonGeoFilters, value: string) => {
     setComparisonGeoFilters(prev => {
         const newFilters = {...prev, [filterName]: value};
@@ -420,7 +423,6 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
               <InteractiveMap retailers={mapRetailers} geoJsonData={null} />
             </div>
 
-            {/* Provider POSM Visibility moved to after the map */}
             <div className="mb-6 p-4 bg-white dark:bg-dark-card rounded-lg shadow">
                 <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-3">Provider POSM Visibility</h3>
                 {providerPosmMetrics.length > 0 ? providerPosmMetrics.map(metric => {
