@@ -1,5 +1,4 @@
-# fastapi-backend/app/models.py
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Tuple, Any, Dict
 
 class FilterOption(BaseModel):
@@ -88,28 +87,16 @@ class FetchPosmGeneralResponse(BaseModel):
     count: int
     providerMetrics: List[ProviderMetric]
 
+# ** CORRECTED PosmGeneralFiltersState Model **
 class PosmGeneralFiltersState(BaseModel):
     provider: Optional[str] = 'all'
     province: Optional[str] = 'all'
     district: Optional[str] = 'all'
     dsDivision: Optional[str] = 'all'
     retailerId: Optional[str] = 'all'
-    posmStatus: Optional[str] = 'all' # 'all', 'increase', 'decrease'
-    visibilityRange: Optional[str] = None # Expected as 'min,max' string from query
-
-    @validator('visibilityRange', pre=True, always=True)
-    def parse_visibility_range(cls, v):
-        if isinstance(v, str):
-            try:
-                min_val, max_val = map(float, v.split(','))
-                return [min_val, max_val]
-            except ValueError:
-                raise ValueError("visibilityRange must be two comma-separated numbers")
-        elif isinstance(v, list) and len(v) == 2:
-            return v
-        elif v is None: # Allow None if not provided
-            return [0.0, 100.0] # Default if not provided or handle as truly optional
-        raise ValueError("Invalid visibilityRange format")
+    posmStatus: Optional[str] = 'all'
+    # Accept visibilityRange as a simple string from the query. We will parse it in the router.
+    visibilityRange: Optional[str] = '0,100'
 
 
 class GeoJsonFeatureProperties(BaseModel):
