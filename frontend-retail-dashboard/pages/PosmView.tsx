@@ -10,7 +10,7 @@ import PercentageBar from '../components/metrics/PercentageBar';
 import PosmComparison from '../components/posm/PosmComparison';
 import LoadingSpinner from '../components/shared/LoadingSpinner';
 import ErrorMessage from '../components/shared/ErrorMessage';
-import { SingleImage } from '../components/image/ImageDisplay'; // Import SingleImage specifically
+import { SingleImage } from '../components/image/ImageDisplay';
 import RangeSlider from '../components/shared/RangeSlider';
 import Button from '../components/shared/Button';
 import {
@@ -165,7 +165,7 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
 
   const fetchDataForGeneralSubView = useCallback(async (filtersToUse: PosmGeneralFiltersState) => {
     setIsLoading(true); setError(null);
-    setSelectedRetailerImageId(undefined); // Reset image when filters change
+    setSelectedRetailerImageId(undefined);
 
     try {
       const { data, count, providerMetrics: fetchedProviderMetrics } = await fetchPosmGeneral(filtersToUse);
@@ -174,7 +174,7 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
       const retailerApiFilters: any = {
         provider: filtersToUse.provider,
         dsDivision: filtersToUse.dsDivision,
-         ...(isSalesView ? { salesRegion: filtersToUse.province, salesDistrict: filtersToUse.district } // Map state to API params
+         ...(isSalesView ? { salesRegion: filtersToUse.province, salesDistrict: filtersToUse.district }
                           : { province: filtersToUse.province, district: filtersToUse.district }),
       };
       if (filtersToUse.retailerId !== 'all') { retailerApiFilters.retailerId = filtersToUse.retailerId; }
@@ -184,7 +184,6 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
       
       if (filtersToUse.retailerId && filtersToUse.retailerId !== 'all') {
         const selectedRetailerDetails = retailersForMapData.find(r => r.id === filtersToUse.retailerId);
-        // For POSM, an image might come from the POSM entry itself or the retailer's general image
         const relevantPosmEntry = data.find(p => p.retailerId === filtersToUse.retailerId);
         setSelectedRetailerImageId(relevantPosmEntry?.originalPosmImageIdentifier || selectedRetailerDetails?.imageIdentifier);
       }
@@ -205,27 +204,19 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchTotalRetailerCountForPosm, subView]);
 
-
   const handleGeneralFilterChange = useCallback((filterName: keyof PosmGeneralFiltersState, value: string | [number, number]) => {
     setCurrentGeneralFilters(prev => {
         const newFilters = { ...prev, [filterName]: value };
-        let optionsNeedRefetch = false;
         if (filterName === 'provider') {
             newFilters.province = 'all'; newFilters.district = 'all'; newFilters.dsDivision = 'all'; newFilters.retailerId = 'all';
             newFilters.posmStatus = 'all'; newFilters.visibilityRange = [0, 100];
-            optionsNeedRefetch = true;
         } else if (filterName === 'province' && value !== prev.province) {
             newFilters.district = 'all'; newFilters.dsDivision = 'all'; newFilters.retailerId = 'all';
-            optionsNeedRefetch = true;
         } else if (filterName === 'district' && value !== prev.district) {
             newFilters.dsDivision = 'all'; newFilters.retailerId = 'all';
-            optionsNeedRefetch = true;
         } else if (filterName === 'dsDivision' && value !== prev.dsDivision) {
             newFilters.retailerId = 'all';
-            optionsNeedRefetch = true;
         }
-        // Note: Immediate fetch on these changes is handled by `applyFiltersAndFetchData` via "Apply Filters" button.
-        // Options will refetch based on their own useEffect dependencies.
         return newFilters;
     });
   }, []);
@@ -234,7 +225,6 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
     handleGeneralFilterChange('visibilityRange', values);
   }, [handleGeneralFilterChange]);
 
-  // Dynamic filter options fetching
   useEffect(() => {
     setIsLoadingOptions(prev => ({...prev, provinces: true}));
     fetchProvinces(currentGeneralFilters.provider, isSalesView, 'posm').then(options => {
@@ -263,7 +253,6 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
     setIsLoadingOptions(prev => ({...prev, retailers: true}));
     const filtersForRetailerFetch: any = { 
         provider: currentGeneralFilters.provider,
-        // Pass geo selections correctly
         province: currentGeneralFilters.province === 'all' ? undefined : currentGeneralFilters.province,
         district: currentGeneralFilters.district === 'all' ? undefined : currentGeneralFilters.district,
         dsDivision: currentGeneralFilters.dsDivision === 'all' ? undefined : currentGeneralFilters.dsDivision,
@@ -282,11 +271,10 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
 
   const resetGeneralFilters = useCallback(() => {
     setCurrentGeneralFilters(initialPosmViewFilters);
-    setSelectedRetailerImageId(undefined); // Also reset image
-    fetchDataForGeneralSubView(initialPosmViewFilters); // Fetch with initial filters
+    setSelectedRetailerImageId(undefined);
+    fetchDataForGeneralSubView(initialPosmViewFilters);
   }, [fetchDataForGeneralSubView]);
 
-  // --- Comparison View Logic (largely unchanged, ensure context for API calls) ---
   const handleComparisonGeoFilterChange = useCallback((filterName: keyof typeof initialComparisonGeoFilters, value: string) => {
     setComparisonGeoFilters(prev => {
         const newFilters = {...prev, [filterName]: value};
@@ -418,7 +406,7 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
             {totalSystemRetailers !== null && (
               <div className="mb-6">
                 <MetricBox
-                    title="Total Retailers" // Changed label
+                    title="Total Retailers"
                     value={totalSystemRetailers.toString()}
                     icon={<UsersIcon />}
                     className="text-center bg-green-50 dark:bg-green-900 border-green-500"
@@ -426,7 +414,14 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
                 />
               </div>
             )}
-             <div className="mb-6 p-4 bg-white dark:bg-dark-card rounded-lg shadow">
+            
+            <div className="bg-white dark:bg-dark-card p-4 rounded-lg shadow mb-6">
+              <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-3">Retailer POSM Locations</h3>
+              <InteractiveMap retailers={mapRetailers} geoJsonData={null} />
+            </div>
+
+            {/* Provider POSM Visibility moved to after the map */}
+            <div className="mb-6 p-4 bg-white dark:bg-dark-card rounded-lg shadow">
                 <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-3">Provider POSM Visibility</h3>
                 {providerPosmMetrics.length > 0 ? providerPosmMetrics.map(metric => {
                     const providerConfig = PROVIDERS_CONFIG.find(p => p.name === metric.provider);
@@ -435,11 +430,7 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
             </div>
 
             <div className="bg-white dark:bg-dark-card p-4 rounded-lg shadow mb-6">
-              <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-3">Retailer POSM Locations (Filtered Map: {mapRetailers.length})</h3>
-              <InteractiveMap retailers={mapRetailers} geoJsonData={null} />
-            </div>
-            <div className="bg-white dark:bg-dark-card p-4 rounded-lg shadow mb-6">
-              <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-3">Retailer Image (POSM Context)</h3>
+              <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-3">Retailer Image</h3>
               {currentGeneralFilters.retailerId !== 'all' && selectedRetailerImageId ? (
                 <SingleImage 
                     imageIdentifier={selectedRetailerImageId} 
@@ -449,10 +440,11 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
                     defaultImageUrl="/assets/sample-retailer-placeholder.png"
                 />
               ) : ( <p className="text-gray-500 dark:text-gray-400 text-center py-4"> 
-                    {currentGeneralFilters.retailerId === 'all' ? "Select a specific retailer to view their image." : (isLoadingOptions['retailers'] || isLoading) ? "Loading image..." : "Image not available for the selected retailer."} 
+                    {currentGeneralFilters.retailerId === 'all' ? "Select a specific retailer to view their image." : (isLoadingOptions['retailers'] || isLoading) ? "Loading image..." : "Image not available."} 
                    </p> 
               )}
             </div>
+
             <div className="bg-white dark:bg-dark-card p-4 rounded-lg shadow">
               <div className="flex justify-between items-center mb-3">
                 <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200">POSM Data Details ({posmDataCount} entries)</h3>
@@ -462,7 +454,7 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
             </div>
           </>
         );
-      case 'district': return <div className="text-center p-5">District View for POSM - (Choropleth map functionality pending specific backend GeoJSON data for POSM metrics)</div>;
+      case 'district': return <div className="text-center p-5">District View for POSM is not fully implemented.</div>;
       case 'comparison': return ( <PosmComparison retailerOptions={comparisonRetailerOptions} selectedRetailerId={comparisonRetailerId} batchOptions={availableBatches} />);
       default: return null;
     }
