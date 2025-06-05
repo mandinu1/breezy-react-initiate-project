@@ -11,7 +11,7 @@ import LoadingSpinner from '../components/shared/LoadingSpinner';
 import ErrorMessage from '../components/shared/ErrorMessage';
 import DualImageDisplay from '../components/image/ImageDisplay';
 import Button from '../components/shared/Button';
-import { UsersIcon, DownloadIcon, CubeIcon } from '../components/shared/Icons';
+import { UsersIcon, DownloadIcon } from '../components/shared/Icons'; // CubeIcon removed from here as it won't be used
 
 import {
     fetchBoards,
@@ -21,7 +21,7 @@ import {
     fetchDsDivisions
 } from '../services/api';
 import {
-    BOARD_TYPES,
+    BOARD_TYPES, // Should contain 'dealer', 'tin', 'vertical'
     PROVIDER_FILTER_OPTIONS,
     PROVIDERS_CONFIG,
 } from '../constants';
@@ -31,8 +31,9 @@ interface BoardViewProps {
   setSidebarFilters: (element: React.ReactNode | null) => void;
 }
 
+// Set 'dealer' as the default boardType
 const initialBoardViewFilters: BoardFiltersState = {
-  boardType: 'all',
+  boardType: BOARD_TYPES.find(bt => bt.value === 'dealer')?.value || (BOARD_TYPES[0]?.value || 'dealer'), // Default to 'dealer'
   provider: 'all',
   salesRegion: 'all',
   salesDistrict: 'all',
@@ -40,17 +41,29 @@ const initialBoardViewFilters: BoardFiltersState = {
   retailerId: 'all',
 };
 
-// Adjusted columns for better data representation and to use accessors for derived values
+// Reverted to a more detailed column set for the main data table
 const columnsForBoardView = [
   { Header: 'Entry ID', accessor: 'id' },
-  { Header: 'Retailer ID', accessor: 'retailerId' }, // Changed from PROFILE_ID to match BoardData
-  { Header: 'Retailer Name', accessor: 'PROFILE_NAME' }, // Assumes PROFILE_NAME is on BoardData
-  { Header: 'Board Type', accessor: 'boardType' },
-  { Header: 'Provider', accessor: 'provider' },
+  { Header: 'Retailer ID', accessor: 'retailerId' },
+  { Header: 'Retailer Name', accessor: 'PROFILE_NAME' },
+  { Header: 'Board Type', accessor: 'boardType' }, // This specific entry's determined board type
+  { Header: 'Provider', accessor: 'provider' },   // This specific entry's determined provider
   { Header: 'Province/Region', accessor: (row: BoardData) => row.PROVINCE || row.SALES_REGION },
   { Header: 'District/Sales Dist.', accessor: (row: BoardData) => row.DISTRICT || row.SALES_DISTRICT },
   { Header: 'DS Division', accessor: 'DS_DIVISION' },
   { Header: 'Sales Area', accessor: 'SALES_AREA' },
+  { Header: 'Dialog Name', accessor: 'DIALOG_NAME_BOARD' },
+  { Header: 'Mobitel Name', accessor: 'MOBITEL_NAME_BOARD' },
+  { Header: 'Hutch Name', accessor: 'HUTCH_NAME_BOARD' },
+  { Header: 'Airtel Name', accessor: 'AIRTEL_NAME_BOARD' },
+  { Header: 'Dialog Side', accessor: 'DIALOG_SIDE_BOARD' },
+  { Header: 'Mobitel Side', accessor: 'MOBITEL_SIDE_BOARD' },
+  { Header: 'Hutch Side', accessor: 'HUTCH_SIDE_BOARD' },
+  { Header: 'Airtel Side', accessor: 'AIRTEL_SIDE_BOARD' },
+  { Header: 'Dialog Tin', accessor: 'DIALOG_TIN_BOARD' },
+  { Header: 'Mobitel Tin', accessor: 'MOBITEL_TIN_BOARD' },
+  { Header: 'Hutch Tin', accessor: 'HUTCH_TIN_BOARD' },
+  { Header: 'Airtel Tin', accessor: 'AIRTEL_TIN_BOARD' },
 ];
 
 
@@ -62,7 +75,8 @@ const convertToCSV = (data: any[], columns: { Header: string, accessor: string |
             if (typeof col.accessor === 'function') {
                 cellData = col.accessor(row);
             } else {
-                cellData = row[col.accessor as keyof BoardData]; // Type assertion for direct access
+                 // Ensure accessor is a valid key of BoardData if not a function
+                cellData = row[col.accessor as keyof BoardData];
             }
             if (cellData === undefined || cellData === null) cellData = '';
             else if (typeof cellData === 'number') cellData = cellData.toString();
@@ -92,13 +106,12 @@ const downloadCSV = (csvString: string, filename: string) => {
 const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) => {
   const [currentFilters, setCurrentFilters] = useState<BoardFiltersState>(initialBoardViewFilters);
   const [boardData, setBoardData] = useState<BoardData[]>([]);
-  const [boardDataCount, setBoardDataCount] = useState<number>(0); // Count of filtered board entries
-  const [mapRetailers, setMapRetailers] = useState<Retailer[]>([]); // Retailers to display on map, filtered
-  const [providerMetrics, setProviderMetrics] = useState<ProviderMetric[]>([]); // Actual board counts per provider
-  const [totalSystemRetailers, setTotalSystemRetailers] = useState<number | null>(null); // For prominent display
+  const [boardDataCount, setBoardDataCount] = useState<number>(0);
+  const [mapRetailers, setMapRetailers] = useState<Retailer[]>([]);
+  const [providerMetrics, setProviderMetrics] = useState<ProviderMetric[]>([]);
+  const [totalSystemRetailers, setTotalSystemRetailers] = useState<number | null>(null);
 
-
-  const [isLoading, setIsLoading] = useState<boolean>(true); // Start true for initial load
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isLoadingOptions, setIsLoadingOptions] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
 
@@ -116,11 +129,11 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
 
   const fetchTotalRetailerCount = useCallback(async () => {
     try {
-        const allRetailers = await fetchRetailers({}, 'board'); // Empty filters, context 'board'
+        const allRetailers = await fetchRetailers({}, 'board');
         setTotalSystemRetailers(allRetailers.length);
     } catch (e) {
         console.error("Failed to fetch total board retailer count", e);
-        setTotalSystemRetailers(0); // Fallback or handle error state
+        setTotalSystemRetailers(0);
     }
   }, []);
 
@@ -133,9 +146,7 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
       setBoardData(data); setBoardDataCount(count); setProviderMetrics(fetchedProviderMetrics);
 
       const retailerApiFilters: any = {
-          provider: filtersToUse.provider,
-          dsDivision: filtersToUse.dsDivision,
-          // Use correct geo keys based on viewMode for fetching map retailers
+          provider: filtersToUse.provider, dsDivision: filtersToUse.dsDivision,
           ...(isSalesView ? { salesRegion: filtersToUse.salesRegion, salesDistrict: filtersToUse.salesDistrict }
                           : { province: filtersToUse.salesRegion, district: filtersToUse.salesDistrict }),
       };
@@ -147,34 +158,28 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
       if (filtersToUse.retailerId && filtersToUse.retailerId !== 'all') {
         const selectedRetailer = retailersForMapData.find(r => r.id === filtersToUse.retailerId);
         setSelectedRetailerForOriginalImage(selectedRetailer || null);
-        
-        // Find a relevant board from the already filtered boardData for image display
         const relevantBoard = data.find(b => b.retailerId === filtersToUse.retailerId);
         if (relevantBoard) {
             setDetectedBoardImageIdentifier(relevantBoard.detectedBoardImageIdentifier || relevantBoard.originalBoardImageIdentifier);
         }
       }
     } catch (err: any) {
-      console.error("Failed to fetch board data:", err);
-      setError(err.message || "Failed to load board data. Please try again.");
+      setError(err.message || "Failed to load board data.");
       setBoardData([]); setBoardDataCount(0); setProviderMetrics([]); setMapRetailers([]);
     } finally {
       setIsLoading(false);
     }
-  }, [isSalesView]); // isSalesView is stable for the lifetime of the component instance
+  }, [isSalesView]);
 
-  // Initial data load: fetch total retailers and then main board data with default filters
   useEffect(() => {
     fetchTotalRetailerCount();
     fetchDataWithCurrentFilters(initialBoardViewFilters);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchTotalRetailerCount]); // fetchDataWithCurrentFilters removed from here to avoid loops. Initial call is enough.
+  }, [fetchTotalRetailerCount]); // Keep fetchDataWithCurrentFilters out of deps for initial call
 
   const handleFilterChange = useCallback((filterName: keyof BoardFiltersState, value: string) => {
     setCurrentFilters(prev => {
         const newFilters = { ...prev, [filterName]: value };
-        // Reset child geo filters if a parent geo filter is changed to a specific value
-        // Or if provider changes, reset all geo and retailer
         if (filterName === 'provider') {
             newFilters.salesRegion = 'all'; newFilters.salesDistrict = 'all'; newFilters.dsDivision = 'all'; newFilters.retailerId = 'all';
         } else if (filterName === 'salesRegion' && value !== 'all') {
@@ -184,13 +189,10 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
         } else if (filterName === 'dsDivision' && value !== 'all') {
             newFilters.retailerId = 'all';
         }
-        // If boardType changes, the providerMetrics will reflect counts for that type.
-        // No need to reset other filters based on boardType change alone.
         return newFilters;
     });
   }, []);
 
-  // Dynamic filter options fetching based on current selections
   useEffect(() => {
     setIsLoadingOptions(prev => ({...prev, provinces: true}));
     fetchProvinces(currentFilters.provider, isSalesView, 'board').then(options => {
@@ -228,7 +230,6 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
     }).finally(() => setIsLoadingOptions(prev => ({...prev, retailers: false})));
   }, [currentFilters.provider, currentFilters.salesRegion, currentFilters.salesDistrict, currentFilters.dsDivision, isSalesView]);
 
-
   const applyFiltersAndFetchData = useCallback(() => {
       fetchDataWithCurrentFilters(currentFilters);
   }, [currentFilters, fetchDataWithCurrentFilters]);
@@ -241,16 +242,14 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
   useEffect(() => {
     const filterUI = (
       <FilterPanel title="Board Filters" onApplyFilters={applyFiltersAndFetchData} onResetFilters={resetAllFilters}>
-        {/* Moved Board Type selection above other filters */}
         <div className="mb-4 pb-4 border-b border-gray-200 dark:border-gray-600">
             <RadioGroup
               label="Board Type" name="boardType"
-              options={[{value: 'all', label: 'All Types'}, ...BOARD_TYPES]} // Ensure 'all' is a valid option
+              options={BOARD_TYPES} // Removed "All Types" option
               selectedValue={currentFilters.boardType}
               onChange={(value) => handleFilterChange('boardType', value)}
             />
         </div>
-
         <SelectDropdown
           label="Provider" options={PROVIDER_FILTER_OPTIONS} value={currentFilters.provider}
           onChange={(e) => handleFilterChange('provider', e.target.value)}
@@ -300,11 +299,11 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
       {totalSystemRetailers !== null && (
           <div className="mb-6">
             <MetricBox
-                title="Total Retailers" // Changed label
+                title="Total Retailers" // Consistent Label
                 value={totalSystemRetailers.toString()}
                 icon={<UsersIcon />}
                 className="text-center bg-blue-50 dark:bg-blue-900 border-blue-500"
-                accentColor="#1E40AF" // Example accent color, adjust as needed
+                accentColor="#1E40AF"
             />
           </div>
       )}
@@ -314,7 +313,13 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
 
       {!isLoading && !error && (
         <>
-          {/* Provider-Specific Board Counts Display */}
+          <div className="bg-white dark:bg-dark-card p-4 rounded-lg shadow mb-6">
+            {/* Map title simplified */}
+            <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-3">Retailer Locations</h3>
+            <InteractiveMap retailers={mapRetailers} geoJsonData={null} />
+          </div>
+
+          {/* Board Counts per Provider moved after the map */}
           <div className="mb-6 p-4 bg-white dark:bg-dark-card rounded-lg shadow">
             <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-3">Board Counts per Provider</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -323,21 +328,16 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
                     return (
                         <MetricBox
                             key={metric.provider}
-                            title={`${metric.provider} Boards`} // e.g., "Dialog Boards"
-                            value={metric.count?.toString() || '0'} // This now represents actual board count sum
+                            title={`${metric.provider} Boards`}
+                            value={metric.count?.toString() || '0'}
                             accentColor={providerConfig?.color}
                             providerLogoUrl={providerConfig?.logoUrl}
-                            icon={<CubeIcon />}
+                            // Icon removed as per request
                         />
                     );
                 })}
             </div>
              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Counts reflect total boards for each provider based on current filters (including Board Type).</p>
-          </div>
-        
-          <div className="bg-white dark:bg-dark-card p-4 rounded-lg shadow mb-6">
-            <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-3">Retailer Locations (Filtered Map: {mapRetailers.length})</h3>
-            <InteractiveMap retailers={mapRetailers} geoJsonData={null} />
           </div>
           
           <div className="bg-white dark:bg-dark-card p-4 rounded-lg shadow mb-6">
