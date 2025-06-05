@@ -37,12 +37,10 @@ export const fetchBoards = async (filters: Partial<BoardFiltersState>): Promise<
 export const fetchPosmGeneral = async (filters: Partial<PosmGeneralFiltersState>): Promise<{ data: PosmData[], count: number, providerMetrics: ProviderMetric[] }> => {
   console.log('Fetching POSM general data with filters (LIVE):', filters);
   try {
-    // Ensure visibilityRange is formatted as a string if backend expects 'min,max'
     let queryParams: any = { ...filters };
     if (filters.visibilityRange) {
       queryParams.visibilityRange = filters.visibilityRange.join(',');
     }
-
     const response = await apiClient.get('/posm/general', { params: queryParams });
     return response.data;
   } catch (error) {
@@ -52,11 +50,12 @@ export const fetchPosmGeneral = async (filters: Partial<PosmGeneralFiltersState>
 };
 
 // Dynamic Filter Options Fetchers
-export const fetchProvinces = async (provider?: string, salesView: boolean = false, context: 'board' | 'posm' = 'board'): Promise<FilterOption[]> => {
-  console.log(`Fetching provinces (LIVE) for provider: ${provider}, salesView: ${salesView}, context: ${context}`);
+export const fetchProvinces = async (provider?: string, salesView: boolean = false, context: 'board' | 'posm' = 'board', boardType?: string): Promise<FilterOption[]> => {
+  console.log(`Fetching provinces (LIVE) for provider: ${provider}, context: ${context}, boardType: ${boardType}`);
   try {
-    const params: any = { context }; // Add context for backend if it needs to differentiate data source for options
+    const params: any = { context };
     if (provider && provider !== 'all') params.provider = provider;
+    if (context === 'board' && boardType && boardType !== 'all') params.boardType = boardType;
     const response = await apiClient.get('/options/provinces', { params });
     return response.data;
   } catch (error) {
@@ -65,12 +64,13 @@ export const fetchProvinces = async (provider?: string, salesView: boolean = fal
   }
 };
 
-export const fetchDistricts = async (provider?: string, province?: string, salesView: boolean = false, context: 'board' | 'posm' = 'board'): Promise<FilterOption[]> => {
-  console.log(`Fetching districts (LIVE) for provider: ${provider}, province: ${province}, salesView: ${salesView}, context: ${context}`);
+export const fetchDistricts = async (provider?: string, province?: string, salesView: boolean = false, context: 'board' | 'posm' = 'board', boardType?: string): Promise<FilterOption[]> => {
+  console.log(`Fetching districts (LIVE) for provider: ${provider}, province: ${province}, context: ${context}, boardType: ${boardType}`);
   try {
     const params: any = { context };
     if (provider && provider !== 'all') params.provider = provider;
     if (province && province !== 'all') params.province = province;
+    if (context === 'board' && boardType && boardType !== 'all') params.boardType = boardType;
     const response = await apiClient.get('/options/districts', { params });
     return response.data;
   } catch (error) {
@@ -79,13 +79,14 @@ export const fetchDistricts = async (provider?: string, province?: string, sales
   }
 };
 
-export const fetchDsDivisions = async (provider?: string, province?: string, district?: string, context: 'board' | 'posm' = 'board'): Promise<FilterOption[]> => {
-  console.log(`Fetching DS Divisions (LIVE) for provider: ${provider}, province: ${province}, district: ${district}, context: ${context}`);
+export const fetchDsDivisions = async (provider?: string, province?: string, district?: string, context: 'board' | 'posm' = 'board', boardType?: string): Promise<FilterOption[]> => {
+  console.log(`Fetching DS Divisions (LIVE) for provider: ${provider}, province: ${province}, district: ${district}, context: ${context}, boardType: ${boardType}`);
   try {
     const params: any = { context };
     if (provider && provider !== 'all') params.provider = provider;
     if (province && province !== 'all') params.province = province;
     if (district && district !== 'all') params.district = district;
+    if (context === 'board' && boardType && boardType !== 'all') params.boardType = boardType;
     const response = await apiClient.get('/options/ds-divisions', { params });
     return response.data;
   } catch (error) {
@@ -97,9 +98,8 @@ export const fetchDsDivisions = async (provider?: string, province?: string, dis
 export const fetchRetailers = async (filters: any, context: 'board' | 'posm' = 'board'): Promise<Retailer[]> => {
     console.log(`Fetching retailers with filters (LIVE) for ${context}:`, filters);
     try {
-        const queryParams: any = { ...filters, context }; // Pass context
-        // Backend /retailers endpoint handles mapping of province/salesRegion etc.
-
+        const queryParams: any = { ...filters, context };
+        // boardType is already part of 'filters' if passed from BoardView
         const response = await apiClient.get('/retailers', { params: queryParams });
         return response.data;
     } catch (error) {
@@ -108,7 +108,7 @@ export const fetchRetailers = async (filters: any, context: 'board' | 'posm' = '
     }
 };
 
-
+// ... (rest of the API service file remains the same as provided in the previous step)
 const mockDelay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const fetchPosmComparisonData = async (profileId: string, batch1Id: string, batch2Id: string): Promise<PosmComparisonData> => {
@@ -150,7 +150,6 @@ export const fetchImageInfo = async (imageIdentifier: string): Promise<ImageInfo
      return { id: 'placeholder', url: '/assets/sample-retailer-placeholder.png', type: 'placeholder' };
   }
   try {
-    // The backend /image-info/{image_identifier} should handle S3 ARN or other IDs
     const response = await apiClient.get(`/image-info/${encodeURIComponent(imageIdentifier)}`);
     return response.data;
   } catch (error) {

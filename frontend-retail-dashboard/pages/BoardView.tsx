@@ -11,7 +11,7 @@ import LoadingSpinner from '../components/shared/LoadingSpinner';
 import ErrorMessage from '../components/shared/ErrorMessage';
 import DualImageDisplay from '../components/image/ImageDisplay';
 import Button from '../components/shared/Button';
-import { UsersIcon, DownloadIcon } from '../components/shared/Icons'; // CubeIcon removed from here as it won't be used
+import { UsersIcon, DownloadIcon } from '../components/shared/Icons';
 
 import {
     fetchBoards,
@@ -21,7 +21,7 @@ import {
     fetchDsDivisions
 } from '../services/api';
 import {
-    BOARD_TYPES, // Should contain 'dealer', 'tin', 'vertical'
+    BOARD_TYPES,
     PROVIDER_FILTER_OPTIONS,
     PROVIDERS_CONFIG,
 } from '../constants';
@@ -31,9 +31,10 @@ interface BoardViewProps {
   setSidebarFilters: (element: React.ReactNode | null) => void;
 }
 
-// Set 'dealer' as the default boardType
+const defaultBoardType = BOARD_TYPES.find(bt => bt.value === 'dealer')?.value || (BOARD_TYPES[0]?.value || 'all');
+
 const initialBoardViewFilters: BoardFiltersState = {
-  boardType: BOARD_TYPES.find(bt => bt.value === 'dealer')?.value || (BOARD_TYPES[0]?.value || 'dealer'), // Default to 'dealer'
+  boardType: defaultBoardType,
   provider: 'all',
   salesRegion: 'all',
   salesDistrict: 'all',
@@ -41,17 +42,15 @@ const initialBoardViewFilters: BoardFiltersState = {
   retailerId: 'all',
 };
 
-// Reverted to a more detailed column set for the main data table
 const columnsForBoardView = [
-  { Header: 'Entry ID', accessor: 'id' },
-  { Header: 'Retailer ID', accessor: 'retailerId' },
-  { Header: 'Retailer Name', accessor: 'PROFILE_NAME' },
-  { Header: 'Board Type', accessor: 'boardType' }, // This specific entry's determined board type
-  { Header: 'Provider', accessor: 'provider' },   // This specific entry's determined provider
-  { Header: 'Province/Region', accessor: (row: BoardData) => row.PROVINCE || row.SALES_REGION },
-  { Header: 'District/Sales Dist.', accessor: (row: BoardData) => row.DISTRICT || row.SALES_DISTRICT },
-  { Header: 'DS Division', accessor: 'DS_DIVISION' },
-  { Header: 'Sales Area', accessor: 'SALES_AREA' },
+  { Header: 'IMAGE_REF_ID', accessor: 'id' },
+  { Header: 'PROFILE_ID', accessor: 'PROFILE_ID' },
+  { Header: 'PROFILE_NAME', accessor: 'PROFILE_NAME' },
+  { Header: 'PROVINCE', accessor: 'PROVINCE' },
+  { Header: 'DISTRICT', accessor: 'DISTRICT' },
+  { Header: 'Sales Dist.', accessor: 'SALES_DISTRICT' },
+  { Header: 'DS_DIVISION', accessor: 'DS_DIVISION' },
+  { Header: 'SALES_AREA', accessor: 'SALES_AREA' },
   { Header: 'Dialog Name', accessor: 'DIALOG_NAME_BOARD' },
   { Header: 'Mobitel Name', accessor: 'MOBITEL_NAME_BOARD' },
   { Header: 'Hutch Name', accessor: 'HUTCH_NAME_BOARD' },
@@ -66,7 +65,6 @@ const columnsForBoardView = [
   { Header: 'Airtel Tin', accessor: 'AIRTEL_TIN_BOARD' },
 ];
 
-
 const convertToCSV = (data: any[], columns: { Header: string, accessor: string | ((row: any) => any) }[]): string => {
     const header = columns.map(col => `"${col.Header.replace(/"/g, '""')}"`).join(',');
     const rows = data.map(row =>
@@ -75,7 +73,6 @@ const convertToCSV = (data: any[], columns: { Header: string, accessor: string |
             if (typeof col.accessor === 'function') {
                 cellData = col.accessor(row);
             } else {
-                 // Ensure accessor is a valid key of BoardData if not a function
                 cellData = row[col.accessor as keyof BoardData];
             }
             if (cellData === undefined || cellData === null) cellData = '';
@@ -139,7 +136,8 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
 
   const fetchDataWithCurrentFilters = useCallback(async (filtersToUse: BoardFiltersState) => {
     setIsLoading(true); setError(null);
-    setSelectedRetailerForOriginalImage(null); setDetectedBoardImageIdentifier(undefined);
+    setSelectedRetailerForOriginalImage(null); 
+    setDetectedBoardImageIdentifier(undefined);
 
     try {
       const { data, count, providerMetrics: fetchedProviderMetrics } = await fetchBoards(filtersToUse);
@@ -147,6 +145,7 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
 
       const retailerApiFilters: any = {
           provider: filtersToUse.provider, dsDivision: filtersToUse.dsDivision,
+          boardType: filtersToUse.boardType,
           ...(isSalesView ? { salesRegion: filtersToUse.salesRegion, salesDistrict: filtersToUse.salesDistrict }
                           : { province: filtersToUse.salesRegion, district: filtersToUse.salesDistrict }),
       };
@@ -175,51 +174,64 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
     fetchTotalRetailerCount();
     fetchDataWithCurrentFilters(initialBoardViewFilters);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchTotalRetailerCount]); // Keep fetchDataWithCurrentFilters out of deps for initial call
+  }, [fetchTotalRetailerCount]);
 
   const handleFilterChange = useCallback((filterName: keyof BoardFiltersState, value: string) => {
     setCurrentFilters(prev => {
         const newFilters = { ...prev, [filterName]: value };
+        // let filtersChangedThatRequireOptionRefetch = false; // Not strictly needed with current individual useEffects
+
         if (filterName === 'provider') {
             newFilters.salesRegion = 'all'; newFilters.salesDistrict = 'all'; newFilters.dsDivision = 'all'; newFilters.retailerId = 'all';
-        } else if (filterName === 'salesRegion' && value !== 'all') {
+            // filtersChangedThatRequireOptionRefetch = true;
+        } else if (filterName === 'salesRegion' && value !== prev.salesRegion) {
             newFilters.salesDistrict = 'all'; newFilters.dsDivision = 'all'; newFilters.retailerId = 'all';
-        } else if (filterName === 'salesDistrict' && value !== 'all') {
+            // filtersChangedThatRequireOptionRefetch = true;
+        } else if (filterName === 'salesDistrict' && value !== prev.salesDistrict) {
             newFilters.dsDivision = 'all'; newFilters.retailerId = 'all';
-        } else if (filterName === 'dsDivision' && value !== 'all') {
+            // filtersChangedThatRequireOptionRefetch = true;
+        } else if (filterName === 'dsDivision' && value !== prev.dsDivision) {
             newFilters.retailerId = 'all';
+            // filtersChangedThatRequireOptionRefetch = true;
+        }
+        
+        if (filterName === 'boardType' && value !== prev.boardType) {
+            fetchDataWithCurrentFilters(newFilters);
         }
         return newFilters;
     });
-  }, []);
+  }, [fetchDataWithCurrentFilters]);
 
   useEffect(() => {
     setIsLoadingOptions(prev => ({...prev, provinces: true}));
-    fetchProvinces(currentFilters.provider, isSalesView, 'board').then(options => {
+    fetchProvinces(currentFilters.provider, isSalesView, 'board', currentFilters.boardType).then(options => {
         setProvinceOptions([{ value: 'all', label: `All ${geoLabel}s` }, ...options]);
     }).finally(() => setIsLoadingOptions(prev => ({...prev, provinces: false})));
-  }, [currentFilters.provider, isSalesView, geoLabel]);
+  }, [currentFilters.provider, currentFilters.boardType, isSalesView, geoLabel]);
 
   useEffect(() => {
     setIsLoadingOptions(prev => ({...prev, districts: true}));
     const provinceToFilterBy = currentFilters.salesRegion === 'all' ? undefined : currentFilters.salesRegion;
-    fetchDistricts(currentFilters.provider, provinceToFilterBy, isSalesView, 'board').then(options => {
+    fetchDistricts(currentFilters.provider, provinceToFilterBy, isSalesView, 'board', currentFilters.boardType).then(options => {
         setDistrictOptions([{ value: 'all', label: `All ${districtLabel}s` }, ...options]);
     }).finally(() => setIsLoadingOptions(prev => ({...prev, districts: false})));
-  }, [currentFilters.provider, currentFilters.salesRegion, isSalesView, districtLabel]);
+  }, [currentFilters.provider, currentFilters.salesRegion, currentFilters.boardType, isSalesView, districtLabel]);
 
   useEffect(() => {
     setIsLoadingOptions(prev => ({...prev, dsDivisions: true}));
     const provinceToFilterBy = currentFilters.salesRegion === 'all' ? undefined : currentFilters.salesRegion;
     const districtToFilterBy = currentFilters.salesDistrict === 'all' ? undefined : currentFilters.salesDistrict;
-    fetchDsDivisions(currentFilters.provider, provinceToFilterBy, districtToFilterBy, 'board').then(options => {
+    fetchDsDivisions(currentFilters.provider, provinceToFilterBy, districtToFilterBy, 'board', currentFilters.boardType).then(options => {
         setDsDivisionOptions([{ value: 'all', label: 'All DS Divisions' }, ...options]);
     }).finally(() => setIsLoadingOptions(prev => ({...prev, dsDivisions: false})));
-  }, [currentFilters.provider, currentFilters.salesRegion, currentFilters.salesDistrict]);
+  }, [currentFilters.provider, currentFilters.salesRegion, currentFilters.salesDistrict, currentFilters.boardType]);
 
   useEffect(() => {
     setIsLoadingOptions(prev => ({...prev, retailers: true}));
-    const filtersForRetailerFetch: any = { provider: currentFilters.provider };
+    const filtersForRetailerFetch: any = {
+        provider: currentFilters.provider,
+        boardType: currentFilters.boardType,
+    };
     if (currentFilters.salesRegion !== 'all') filtersForRetailerFetch[isSalesView ? 'salesRegion' : 'province'] = currentFilters.salesRegion;
     if (currentFilters.salesDistrict !== 'all') filtersForRetailerFetch[isSalesView ? 'salesDistrict' : 'district'] = currentFilters.salesDistrict;
     if (currentFilters.dsDivision !== 'all') filtersForRetailerFetch.dsDivision = currentFilters.dsDivision;
@@ -228,7 +240,7 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
         const options = data.map(r => ({ value: r.id, label: `${r.id} - ${r.name}` }));
         setRetailerFilterOptions([{value: 'all', label: 'All Retailers'}, ...options]);
     }).finally(() => setIsLoadingOptions(prev => ({...prev, retailers: false})));
-  }, [currentFilters.provider, currentFilters.salesRegion, currentFilters.salesDistrict, currentFilters.dsDivision, isSalesView]);
+  }, [currentFilters.provider, currentFilters.salesRegion, currentFilters.salesDistrict, currentFilters.dsDivision, currentFilters.boardType, isSalesView]);
 
   const applyFiltersAndFetchData = useCallback(() => {
       fetchDataWithCurrentFilters(currentFilters);
@@ -236,6 +248,8 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
 
   const resetAllFilters = useCallback(() => {
     setCurrentFilters(initialBoardViewFilters);
+    setSelectedRetailerForOriginalImage(null);
+    setDetectedBoardImageIdentifier(undefined);
     fetchDataWithCurrentFilters(initialBoardViewFilters);
   }, [fetchDataWithCurrentFilters]);
 
@@ -245,7 +259,7 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
         <div className="mb-4 pb-4 border-b border-gray-200 dark:border-gray-600">
             <RadioGroup
               label="Board Type" name="boardType"
-              options={BOARD_TYPES} // Removed "All Types" option
+              options={BOARD_TYPES} 
               selectedValue={currentFilters.boardType}
               onChange={(value) => handleFilterChange('boardType', value)}
             />
@@ -292,14 +306,20 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
     downloadCSV(csvString, 'board_data.csv');
   };
 
+  const selectedBoardTypeLabel = BOARD_TYPES.find(bt => bt.value === currentFilters.boardType)?.label || 
+                               (currentFilters.boardType === 'all' ? 'All Boards' : 'Board'); // Fallback if 'all' was somehow set
+  const mainViewTitle = `${selectedBoardTypeLabel} View`;
+
   return (
     <div className="space-y-6">
-      <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Board View ({viewMode === 'sales' ? 'Sales' : 'Admin'})</h2>
+      <h2 className="text-3xl font-bold text-gray-800 dark:text-gray-100">
+        {mainViewTitle} ({viewMode === 'sales' ? 'Sales' : 'Admin'})
+      </h2>
       
       {totalSystemRetailers !== null && (
           <div className="mb-6">
             <MetricBox
-                title="Total Retailers" // Consistent Label
+                title="Total Retailers"
                 value={totalSystemRetailers.toString()}
                 icon={<UsersIcon />}
                 className="text-center bg-blue-50 dark:bg-blue-900 border-blue-500"
@@ -314,14 +334,14 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
       {!isLoading && !error && (
         <>
           <div className="bg-white dark:bg-dark-card p-4 rounded-lg shadow mb-6">
-            {/* Map title simplified */}
             <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-3">Retailer Locations</h3>
             <InteractiveMap retailers={mapRetailers} geoJsonData={null} />
           </div>
 
-          {/* Board Counts per Provider moved after the map */}
           <div className="mb-6 p-4 bg-white dark:bg-dark-card rounded-lg shadow">
-            <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-3">Board Counts per Provider</h3>
+            <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-3">
+              {selectedBoardTypeLabel} Board Counts per Provider
+            </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {providerMetrics.map(metric => {
                     const providerConfig = PROVIDERS_CONFIG.find(p => p.name === metric.provider);
@@ -332,16 +352,17 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
                             value={metric.count?.toString() || '0'}
                             accentColor={providerConfig?.color}
                             providerLogoUrl={providerConfig?.logoUrl}
-                            // Icon removed as per request
                         />
                     );
                 })}
             </div>
-             <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Counts reflect total boards for each provider based on current filters (including Board Type).</p>
+             <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Counts reflect total boards for each provider based on current filters.</p>
           </div>
           
           <div className="bg-white dark:bg-dark-card p-4 rounded-lg shadow mb-6">
-            <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-3">Retailer & Board Images</h3>
+            <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-3">
+              {selectedBoardTypeLabel} Retailer & Board Image
+            </h3>
             {currentFilters.retailerId !== 'all' && (selectedRetailerForOriginalImage || detectedBoardImageIdentifier) ? (
                 <DualImageDisplay
                     originalImageIdentifier={selectedRetailerForOriginalImage?.imageIdentifier}
@@ -360,7 +381,9 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
 
           <div className="bg-white dark:bg-dark-card p-4 rounded-lg shadow">
             <div className="flex justify-between items-center mb-3">
-              <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200">Board Data Details ({boardDataCount} entries)</h3>
+              <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200">
+                {selectedBoardTypeLabel} Board Details ({boardDataCount} entries)
+              </h3>
               <Button onClick={handleDownloadCSV} variant="outline" size="sm" disabled={boardData.length === 0} aria-label="Download board data as CSV">
                 <DownloadIcon className="w-4 h-4 mr-2"/> Download CSV
               </Button>

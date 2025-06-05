@@ -14,18 +14,16 @@ export const PROVIDER_FILTER_OPTIONS: FilterOption[] = PROVIDERS_CONFIG.map(p =>
 
 export const BOARD_TYPES: FilterOption[] = [
   { value: 'dealer', label: 'Dealer Board' },
-  { value: 'tin', label: 'Tin Plate' },
+  { value: 'tin', label: 'Tin Board' }, // Changed from "Tin Plate"
   { value: 'vertical', label: 'Vertical Board' },
 ];
 
-// Updated POSM_STATUSES for the new requirement
 export const POSM_STATUSES: FilterOption[] = [
   { value: 'all', label: 'All Statuses' },
-  { value: 'increase', label: 'Dominant' }, // "Increase" means selected provider is dominant
-  { value: 'decrease', label: 'Not Dominant' }, // "Decrease" means selected provider is not dominant
+  { value: 'increase', label: 'Dominant' },
+  { value: 'decrease', label: 'Not Dominant' },
 ];
 
-// Static examples below are largely replaced by dynamic fetching.
 export const PROVINCES_STATIC_EXAMPLE: FilterOption[] = [
   { value: 'all', label: 'All Provinces' },
   { value: 'western', label: 'Western' },
