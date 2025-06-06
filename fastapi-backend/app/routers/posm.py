@@ -27,7 +27,6 @@ PROVIDER_NAMES_FOR_COMPARISON = [p["name"] for p in PROVIDERS_CONFIG_API_POSM_RO
 def get_provider_name_map_posm_router():
     return {p["value"]: p["name"] for p in PROVIDERS_CONFIG_API_POSM_ROUTER}
 
-# CORRECTED HELPER: Safely converts a single value to a number, returning a default if it fails.
 def to_numeric_or_default(value, default=0.0):
     num = pd.to_numeric(value, errors='coerce')
     return default if pd.isna(num) else num
@@ -88,9 +87,22 @@ async def fetch_posm_general_api(
             df = pd.DataFrame(columns=df.columns)
         if df.empty: return FetchPosmGeneralResponse(data=[], count=0, providerMetrics=[])
 
+        # --- CORRECTED LOGIC ---
+        # First, apply the visibility range filter if it's not the default [0, 100]
+        if filters.visibilityRange and isinstance(filters.visibilityRange, list) and len(filters.visibilityRange) == 2:
+            min_vis, max_vis = filters.visibilityRange
+            if min_vis > 0 or max_vis < 100:
+                if provider_col_filter in df.columns:
+                    df = df[
+                        (pd.to_numeric(df[provider_col_filter], errors='coerce').fillna(0) >= min_vis) &
+                        (pd.to_numeric(df[provider_col_filter], errors='coerce').fillna(0) <= max_vis)
+                    ]
+        if df.empty: return FetchPosmGeneralResponse(data=[], count=0, providerMetrics=[])
+
+        # Second, apply the status filter (Dominant/Not Dominant)
         if filters.posmStatus and filters.posmStatus != 'all':
             percentage_cols = [f"{p_name.upper()}_AREA_PERCENTAGE" for p_name in PROVIDER_NAMES_FOR_COMPARISON]
-
+            
             for col in percentage_cols:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
@@ -105,15 +117,7 @@ async def fetch_posm_general_api(
                 df = df[df['max_provider_col'] != provider_col_filter]
 
             if df.empty: return FetchPosmGeneralResponse(data=[], count=0, providerMetrics=[])
-
-        if filters.posmStatus == 'all' and filters.visibilityRange and isinstance(filters.visibilityRange, list) and len(filters.visibilityRange) == 2:
-            min_vis, max_vis = filters.visibilityRange
-            if provider_col_filter in df.columns:
-                df = df[
-                    (pd.to_numeric(df[provider_col_filter], errors='coerce').fillna(0) >= min_vis) &
-                    (pd.to_numeric(df[provider_col_filter], errors='coerce').fillna(0) <= max_vis)
-                ]
-            if df.empty: return FetchPosmGeneralResponse(data=[], count=0, providerMetrics=[])
+        # --- END OF CORRECTION ---
 
     posm_data_list: List[PosmData] = []
     for rowIndex, row_series in df.iterrows():
