@@ -87,19 +87,18 @@ async def fetch_posm_general_api(
             df = pd.DataFrame(columns=df.columns)
         if df.empty: return FetchPosmGeneralResponse(data=[], count=0, providerMetrics=[])
 
-        # --- CORRECTED LOGIC ---
-        # First, apply the visibility range filter if it's not the default [0, 100]
+        # --- CORRECTED LOGIC FOR VISIBILITY SLIDER ---
+        # Apply visibility range filter if a provider is selected.
         if filters.visibilityRange and isinstance(filters.visibilityRange, list) and len(filters.visibilityRange) == 2:
             min_vis, max_vis = filters.visibilityRange
-            if min_vis > 0 or max_vis < 100:
-                if provider_col_filter in df.columns:
-                    df = df[
-                        (pd.to_numeric(df[provider_col_filter], errors='coerce').fillna(0) >= min_vis) &
-                        (pd.to_numeric(df[provider_col_filter], errors='coerce').fillna(0) <= max_vis)
-                    ]
+            if provider_col_filter in df.columns:
+                df = df[
+                    (pd.to_numeric(df[provider_col_filter], errors='coerce').fillna(0) >= min_vis) &
+                    (pd.to_numeric(df[provider_col_filter], errors='coerce').fillna(0) <= max_vis)
+                ]
         if df.empty: return FetchPosmGeneralResponse(data=[], count=0, providerMetrics=[])
-
-        # Second, apply the status filter (Dominant/Not Dominant)
+        
+        # Apply status filter (Dominant/Not Dominant)
         if filters.posmStatus and filters.posmStatus != 'all':
             percentage_cols = [f"{p_name.upper()}_AREA_PERCENTAGE" for p_name in PROVIDER_NAMES_FOR_COMPARISON]
             
@@ -117,7 +116,6 @@ async def fetch_posm_general_api(
                 df = df[df['max_provider_col'] != provider_col_filter]
 
             if df.empty: return FetchPosmGeneralResponse(data=[], count=0, providerMetrics=[])
-        # --- END OF CORRECTION ---
 
     posm_data_list: List[PosmData] = []
     for rowIndex, row_series in df.iterrows():
