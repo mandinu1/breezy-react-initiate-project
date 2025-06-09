@@ -6,3 +6,5 @@ pandas>=1.3.0
 python-dotenv>=0.20.0
 # boto3 # Uncomment if implementing real S3
 # snowflake-connector-python # Uncomment if implementing real Snowflake
+memory-profiler>=0.60.0
+geopandas>=0.10.0

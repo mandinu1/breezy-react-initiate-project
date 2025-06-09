@@ -4,7 +4,6 @@ import pandas as pd
 import random
 import numpy as np
 
-
 from app.models import (
     FetchPosmGeneralResponse, PosmGeneralFiltersState, PosmData, ProviderMetric,
     PosmComparisonData, PosmBatchDetails, PosmBatchShare, FilterOption
@@ -88,14 +87,21 @@ async def fetch_posm_general_api(
         if df.empty: return FetchPosmGeneralResponse(data=[], count=0, providerMetrics=[])
 
         # --- CORRECTED LOGIC FOR VISIBILITY SLIDER ---
-        # Apply visibility range filter if a provider is selected.
-        if filters.visibilityRange and isinstance(filters.visibilityRange, list) and len(filters.visibilityRange) == 2:
-            min_vis, max_vis = filters.visibilityRange
-            if provider_col_filter in df.columns:
-                df = df[
-                    (pd.to_numeric(df[provider_col_filter], errors='coerce').fillna(0) >= min_vis) &
-                    (pd.to_numeric(df[provider_col_filter], errors='coerce').fillna(0) <= max_vis)
-                ]
+        if filters.visibilityRange and isinstance(filters.visibilityRange, str):
+            try:
+                min_val_str, max_val_str = filters.visibilityRange.split(',')
+                min_vis = float(min_val_str)
+                max_vis = float(max_val_str)
+
+                if provider_col_filter in df.columns:
+                    provider_percentages = pd.to_numeric(df[provider_col_filter], errors='coerce').fillna(0)
+                    df = df[
+                        (provider_percentages >= min_vis) &
+                        (provider_percentages <= max_vis)
+                    ]
+            except (ValueError, IndexError):
+                # If parsing fails, ignore the filter.
+                pass
         if df.empty: return FetchPosmGeneralResponse(data=[], count=0, providerMetrics=[])
         
         # Apply status filter (Dominant/Not Dominant)
@@ -174,3 +180,70 @@ async def fetch_posm_general_api(
         count=len(posm_data_list),
         providerMetrics=provider_metrics_list
     )
+
+@router.get("/posm/comparison", response_model=PosmComparisonData)
+async def fetch_posm_comparison_data_api(
+    profileId: str = Query(...),
+    batch1Id: str = Query(...),
+    batch2Id: str = Query(...),
+    posm_df_raw: pd.DataFrame = Depends(get_posm_df)
+):
+    if posm_df_raw.empty:
+        raise HTTPException(status_code=404, detail="POSM data not available")
+
+    df_profile = posm_df_raw[posm_df_raw['PROFILE_ID'].astype(str) == profileId].copy()
+    if df_profile.empty:
+        raise HTTPException(status_code=404, detail=f"Retailer with PROFILE_ID {profileId} not found")
+
+    def get_batch_details(batch_id: str) -> PosmBatchDetails:
+        batch_df = df_profile[df_profile['CAPTURE_PHASE'].astype(str) == batch_id]
+        if batch_df.empty:
+            return PosmBatchDetails(image="/assets/sample-retailer-placeholder.png", shares=[], maxCapturePhase=batch_id)
+
+        # Get the first entry for this batch
+        batch_entry = batch_df.iloc[0]
+        shares = []
+        for provider_name in PROVIDER_NAMES_FOR_COMPARISON:
+            col = f"{provider_name.upper()}_AREA_PERCENTAGE"
+            percentage = to_numeric_or_default(batch_entry.get(col))
+            shares.append(PosmBatchShare(provider=provider_name, percentage=round(percentage, 1)))
+        
+        image_arn = safe_str_convert_posm_router(batch_entry.get('INF_S3_ARN') or batch_entry.get('S3_ARN'))
+        
+        return PosmBatchDetails(
+            image=image_arn if image_arn else "/assets/sample-retailer-placeholder.png",
+            shares=shares,
+            maxCapturePhase=safe_str_convert_posm_router(batch_entry.get('CAPTURE_PHASE'))
+        )
+
+    batch1_details = get_batch_details(batch1Id)
+    batch2_details = get_batch_details(batch2Id)
+    
+    # Calculate differences
+    diffs = []
+    for provider_name in PROVIDER_NAMES_FOR_COMPARISON:
+        share1 = next((s.percentage for s in batch1_details.shares if s.provider == provider_name), 0)
+        share2 = next((s.percentage for s in batch2_details.shares if s.provider == provider_name), 0)
+        diffs.append({"provider": provider_name, "diff": round(share2 - share1, 1)})
+
+    return PosmComparisonData(
+        batch1=batch1_details,
+        batch2=batch2_details,
+        differences=diffs
+    )
+
+@router.get("/posm/available-batches/{profile_id}", response_model=List[FilterOption])
+async def fetch_available_batches_for_profile(profile_id: str, posm_df: pd.DataFrame = Depends(get_posm_df)):
+    if posm_df.empty or 'PROFILE_ID' not in posm_df.columns:
+        return []
+    
+    df_profile = posm_df[posm_df['PROFILE_ID'].astype(str) == profile_id]
+    if df_profile.empty:
+        return []
+        
+    unique_phases = df_profile['CAPTURE_PHASE'].dropna().unique()
+    
+    # Sorting assuming phases are numeric or can be string-sorted chronologically
+    sorted_phases = sorted(unique_phases, key=lambda x: str(x))
+    
+    return [FilterOption(value=str(phase), label=f"Batch {phase}") for phase in sorted_phases]
