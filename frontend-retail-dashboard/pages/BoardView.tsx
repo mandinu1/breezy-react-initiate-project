@@ -179,22 +179,31 @@ const BoardView: React.FC<BoardViewProps> = ({ viewMode, setSidebarFilters }) =>
   const handleFilterChange = useCallback((filterName: keyof BoardFiltersState, value: string) => {
     setCurrentFilters(prev => {
         const newFilters = { ...prev, [filterName]: value };
-        // let filtersChangedThatRequireOptionRefetch = false; // Not strictly needed with current individual useEffects
-
-        if (filterName === 'provider') {
-            newFilters.salesRegion = 'all'; newFilters.salesDistrict = 'all'; newFilters.dsDivision = 'all'; newFilters.retailerId = 'all';
-            // filtersChangedThatRequireOptionRefetch = true;
-        } else if (filterName === 'salesRegion' && value !== prev.salesRegion) {
-            newFilters.salesDistrict = 'all'; newFilters.dsDivision = 'all'; newFilters.retailerId = 'all';
-            // filtersChangedThatRequireOptionRefetch = true;
-        } else if (filterName === 'salesDistrict' && value !== prev.salesDistrict) {
-            newFilters.dsDivision = 'all'; newFilters.retailerId = 'all';
-            // filtersChangedThatRequireOptionRefetch = true;
-        } else if (filterName === 'dsDivision' && value !== prev.dsDivision) {
+        
+        // **NEW LOGIC**: If boardType changes, reset provider and all subsequent filters.
+        if (filterName === 'boardType') {
+            newFilters.provider = 'all';
+            newFilters.salesRegion = 'all';
+            newFilters.salesDistrict = 'all';
+            newFilters.dsDivision = 'all';
             newFilters.retailerId = 'all';
-            // filtersChangedThatRequireOptionRefetch = true;
+        } else if (filterName === 'provider') {
+            newFilters.salesRegion = 'all';
+            newFilters.salesDistrict = 'all';
+            newFilters.dsDivision = 'all';
+            newFilters.retailerId = 'all';
+        } else if (filterName === 'salesRegion') {
+            newFilters.salesDistrict = 'all';
+            newFilters.dsDivision = 'all';
+            newFilters.retailerId = 'all';
+        } else if (filterName === 'salesDistrict') {
+            newFilters.dsDivision = 'all';
+            newFilters.retailerId = 'all';
+        } else if (filterName === 'dsDivision') {
+            newFilters.retailerId = 'all';
         }
         
+        // Automatically refetch data when the board type changes for immediate feedback
         if (filterName === 'boardType' && value !== prev.boardType) {
             fetchDataWithCurrentFilters(newFilters);
         }

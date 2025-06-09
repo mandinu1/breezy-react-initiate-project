@@ -1,4 +1,3 @@
-// mandinu1/breezy-react-initiate-project/breezy-react-initiate-project-653165f7b5ee7d64c670d05e8777412d3daa000e/App.tsx
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation, Outlet } from 'react-router-dom';
 import Sidebar from './components/layout/Sidebar';
@@ -6,12 +5,12 @@ import MainContent from './components/layout/MainContent';
 import BoardView from './pages/BoardView';
 import PosmView from './pages/PosmView';
 import ManagementView from './pages/ManagementView';
-import LandingPage from './pages/LandingPage'; // Import the new LandingPage
+import LandingPage from './pages/LandingPage';
 import { ViewMode, Page } from './types';
 
 export type Theme = 'light' | 'dark';
 
-// New component to manage the Dashboard Layout
+// This layout component now manages the remounting of its children via a key
 const DashboardLayout: React.FC<{
   viewMode: ViewMode;
   setViewMode: (mode: ViewMode) => void;
@@ -31,7 +30,14 @@ const DashboardLayout: React.FC<{
         activeFilterElement={sidebarFilterContent}
       />
       <MainContent>
-        <Outlet /> {/* Child routes (BoardView, PosmView, etc.) will render here */}
+        {/*
+          By adding a key here that changes on navigation or viewMode change,
+          we force React to unmount the old view and mount a new one,
+          which effectively resets the component's internal state.
+        */}
+        <div key={`${currentPage}-${viewMode}`} className="h-full">
+          <Outlet />
+        </div>
       </MainContent>
     </div>
   );
@@ -55,63 +61,39 @@ const App: React.FC = () => {
   const toggleTheme = () => {
     setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
   };
-  
-  // Determine currentPage based on location for the DashboardLayout
-  let currentPage: Page = 'board'; // Default for dashboard
+
+  // Determine currentPage based on the URL path
+  let currentPage: Page = 'board'; // default
   if (location.pathname.startsWith('/posm')) currentPage = 'posm';
   else if (location.pathname.startsWith('/management')) currentPage = 'management';
-  else if (location.pathname.startsWith('/board')) currentPage = 'board';
-
 
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
       
-      {/* Nested routes for dashboard views that share the DashboardLayout */}
-      <Route 
+      {/* All dashboard routes are nested under the layout */}
+      <Route
+        path="/*"
         element={
-          <DashboardLayout 
-            viewMode={viewMode} 
-            setViewMode={setViewMode} 
-            theme={theme} 
-            toggleTheme={toggleTheme} 
+          <DashboardLayout
+            viewMode={viewMode}
+            setViewMode={setViewMode}
+            theme={theme}
+            toggleTheme={toggleTheme}
             sidebarFilterContent={sidebarFilterContent}
             currentPage={currentPage}
           />
         }
       >
-        <Route 
-          path="/board" 
-          element={
-            <BoardView 
-              key={`/board-${viewMode}`} 
-              viewMode={viewMode} 
-              setSidebarFilters={setSidebarFilterContent} 
-            />
-          } 
-        />
-        <Route 
-          path="/posm" 
-          element={
-            <PosmView 
-              key={`/posm-${viewMode}`} 
-              viewMode={viewMode} 
-              setSidebarFilters={setSidebarFilterContent} 
-            />
-          } 
-        />
-        <Route 
-          path="/management" 
-          element={
-            <ManagementView 
-              key={`/management-${viewMode}`} 
-              setSidebarFilters={setSidebarFilterContent}
-            />
-          } 
-        />
+        <Route path="board" element={<BoardView viewMode={viewMode} setSidebarFilters={setSidebarFilterContent} />} />
+        <Route path="posm" element={<PosmView viewMode={viewMode} setSidebarFilters={setSidebarFilterContent} />} />
+        <Route path="management" element={<ManagementView setSidebarFilters={setSidebarFilterContent} />} />
+        
+        {/* Redirect base dashboard path to board view */}
+        <Route index element={<Navigate to="/board" replace />} />
       </Route>
-      
-      {/* Optional: Redirect any other unmatched path to the landing page or a 404 page */}
+
+      {/* Fallback redirect for any unmatched path */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
