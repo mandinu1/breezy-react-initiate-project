@@ -7,15 +7,16 @@ import ErrorMessage from '../shared/ErrorMessage';
 import { FilterOption, PosmComparisonData, PosmBatchDetails } from '../../types';
 import { fetchPosmComparisonData } from '../../services/api';
 import { PROVIDERS_CONFIG } from '../../constants';
-import DualImageDisplay from '../image/ImageDisplay';
+import { SingleImage } from '../image/ImageDisplay';
 
 interface PosmComparisonProps {
     retailerOptions: FilterOption[];
     selectedRetailerId: string;
     batchOptions: FilterOption[];
+    isLoadingBatches: boolean;
 }
 
-const PosmComparison: React.FC<PosmComparisonProps> = ({ retailerOptions, selectedRetailerId, batchOptions }) => {
+const PosmComparison: React.FC<PosmComparisonProps> = ({ retailerOptions, selectedRetailerId, batchOptions, isLoadingBatches }) => {
   const [batch1Id, setBatch1Id] = useState<string>('');
   const [batch2Id, setBatch2Id] = useState<string>('');
   
@@ -61,7 +62,6 @@ const PosmComparison: React.FC<PosmComparisonProps> = ({ retailerOptions, select
       setError("Please select a retailer and two different batches.");
       return;
     }
-
     setIsLoading(true);
     setError(null);
     try {
@@ -82,16 +82,24 @@ const PosmComparison: React.FC<PosmComparisonProps> = ({ retailerOptions, select
     return (
         <div className="text-center p-6 bg-white dark:bg-dark-card rounded-lg shadow">
             <h3 className="text-xl font-semibold mb-2">POSM Comparison</h3>
-            <p className="text-gray-500">Please select a retailer from the sidebar to start a comparison.</p>
+            <p className="text-gray-500">Please select a retailer from the sidebar to begin a comparison.</p>
         </div>
     );
   }
   
+  if (isLoadingBatches) {
+      return (
+          <div className="text-center p-6 bg-white dark:bg-dark-card rounded-lg shadow">
+              <LoadingSpinner message="Loading available batches..." />
+          </div>
+      )
+  }
+
   if (batchOptions.length < 2) {
     return (
         <div className="text-center p-6 bg-white dark:bg-dark-card rounded-lg shadow">
             <h3 className="text-xl font-semibold mb-2">POSM Comparison for {currentRetailerLabel}</h3>
-            <p className="text-gray-500">This retailer does not have enough batches for comparison.</p>
+            <p className="text-gray-500">This retailer does not have enough batches to compare.</p>
         </div>
     );
   }
@@ -100,7 +108,11 @@ const PosmComparison: React.FC<PosmComparisonProps> = ({ retailerOptions, select
     return (
         <div className="p-4 border rounded-lg dark:border-gray-700 space-y-3 bg-gray-50 dark:bg-gray-800">
             <h4 className="text-lg font-semibold text-gray-800 dark:text-gray-200 text-center mb-2">{title}</h4>
-            <DualImageDisplay originalImageIdentifier={batchDetails.image} altTextPrefix={title} />
+            <SingleImage
+                imageIdentifier={batchDetails.image}
+                altText={`Detected image for ${title}`}
+                title="Detected Image"
+            />
             <div className="pt-2 space-y-2">
                 {actualProviders.map(providerConfig => {
                     const shareInfo = batchDetails.shares.find(s => s.provider === providerConfig.name);
@@ -117,9 +129,9 @@ const PosmComparison: React.FC<PosmComparisonProps> = ({ retailerOptions, select
     <div className="space-y-6 bg-white dark:bg-dark-card p-6 rounded-lg shadow">
       <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200">Comparison for: <span className="text-primary dark:text-secondary">{currentRetailerLabel}</span></h3>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-        <SelectDropdown label="Previous View" options={availableBatch1Options} value={batch1Id} onChange={(e) => setBatch1Id(e.target.value)} />
+        <SelectDropdown label="Compare Batch" options={availableBatch1Options} value={batch1Id} onChange={(e) => setBatch1Id(e.target.value)} />
         <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Current View</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">With Latest Batch</label>
             <div className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 bg-gray-100 dark:bg-gray-700 dark:border-gray-600 rounded-md shadow-sm">
                 {batch2DisplayLabel}
             </div>
@@ -130,6 +142,7 @@ const PosmComparison: React.FC<PosmComparisonProps> = ({ retailerOptions, select
       </Button>
 
       {error && <ErrorMessage title="Comparison Error" message={error} />}
+      {isLoading && <div className="text-center p-4"><LoadingSpinner message="Loading comparison data..." /></div>}
 
       {comparisonData && (
         <div className="mt-6 space-y-6">
@@ -139,7 +152,7 @@ const PosmComparison: React.FC<PosmComparisonProps> = ({ retailerOptions, select
             </div>
 
             <div className="pt-4 border-t dark:border-gray-700">
-              <h4 className="text-xl font-semibold text-gray-800 dark:text-gray-200 mb-3 text-center">Share Difference (Current vs. Previous)</h4>
+              <h4 className="text-xl font-semibold text-gray-800 dark:text-gray-200 mb-3 text-center">Share Difference (Latest vs. Previous)</h4>
               <div className="space-y-1 max-w-md mx-auto">
                 {comparisonData.differences.map(diff => {
                     const diffValue = diff.diff;

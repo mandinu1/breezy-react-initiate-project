@@ -130,13 +130,14 @@ export interface BoardFiltersState {
 }
 
 export interface PosmGeneralFiltersState {
-  provider: string; // 'all', 'dialog', etc.
-  province: string; // 'all', or specific province value (used for admin geo hierarchy, maps to salesRegion for sales)
-  district: string; // 'all', or specific district value
-  dsDivision: string; // 'all', or specific ds_division value
-  retailerId:string; // 'all', or specific retailer PROFILE_ID
-  posmStatus: string; // 'all', 'increase' (dominant), 'decrease' (not dominant)
-  visibilityRange: [number, number]; // Range [0, 100] for selected provider's visibility
+  provider: string;
+  province: string;
+  district: string;
+  dsDivision: string;
+  retailerId:string;
+  posmStatus: string;
+  visibilityRange: [number, number];
+  posmChange: 'all' | 'increase' | 'decrease'; // Updated this line
 }
 
 // Types for POSM Comparison

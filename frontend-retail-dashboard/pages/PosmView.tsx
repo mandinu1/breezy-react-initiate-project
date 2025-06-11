@@ -32,10 +32,18 @@ import {
     fetchAvailableBatches,
     fetchProvinces,
     fetchDistricts,
-    fetchDsDivisions
+    fetchDsDivisions,
+    fetchRetailersByPosmChange,
 } from '../services/api';
 
 type PosmSubView = 'general' | 'district' | 'comparison';
+
+const POSM_CHANGE_OPTIONS: FilterOption[] = [
+    { value: 'all', label: 'All Changes' },
+    { value: 'increase', label: 'Increased Presence' },
+    { value: 'decrease', label: 'Decreased Presence' },
+];
+
 
 interface PosmViewProps {
   viewMode: ViewMode;
@@ -50,6 +58,7 @@ const initialPosmViewFilters: PosmGeneralFiltersState = {
   retailerId: 'all',
   posmStatus: 'all',
   visibilityRange: [0, 100],
+  posmChange: 'all',
 };
 
 const subViewIcons: Record<PosmSubView, React.ReactElement<IconProps>> = {
@@ -97,13 +106,11 @@ const downloadCSV = (csvString: string, filename: string) => {
 
 const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
   const [subView, setSubView] = useState<PosmSubView>('general');
-  // State for General View
   const [activeFilters, setActiveFilters] = useState<PosmGeneralFiltersState>(initialPosmViewFilters);
   const [pendingFilters, setPendingFilters] = useState<PosmGeneralFiltersState>(initialPosmViewFilters);
 
-  // State for Comparison View
-  const [comparisonFilters, setComparisonFilters] = useState<Omit<PosmGeneralFiltersState, 'posmStatus' | 'visibilityRange'>>({ ...initialPosmViewFilters });
-  const [pendingComparisonFilters, setPendingComparisonFilters] = useState<Omit<PosmGeneralFiltersState, 'posmStatus' | 'visibilityRange'>>({ ...initialPosmViewFilters });
+  const [comparisonFilters, setComparisonFilters] = useState<PosmGeneralFiltersState>(initialPosmViewFilters);
+  const [pendingComparisonFilters, setPendingComparisonFilters] = useState<PosmGeneralFiltersState>(initialPosmViewFilters);
   const [comparisonRetailerOptions, setComparisonRetailerOptions] = useState<FilterOption[]>([{ value: 'all', label: 'All Retailers' }]);
   const [availableBatches, setAvailableBatches] = useState<FilterOption[]>([]);
 
@@ -121,7 +128,7 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
 
   const [provinceOptions, setProvinceOptions] = useState<FilterOption[]>([{ value: 'all', label: 'Loading...' }]);
   const [districtOptions, setDistrictOptions] = useState<FilterOption[]>([{ value: 'all', label: 'All Districts' }]);
-  const [dsDivisionOptions, setDsDivisionOptions] = useState<FilterOption[]>([{ value: 'all', 'label': 'All DS Divisions' }]);
+  const [dsDivisionOptions, setDsDivisionOptions] = useState<FilterOption[]>([{ value: 'all', label: 'All DS Divisions' }]);
   const [retailerOptions, setRetailerOptions] = useState<FilterOption[]>([{ value: 'all', label: 'All Retailers' }]);
 
   const [selectedOriginalImageId, setSelectedOriginalImageId] = useState<string | undefined>(undefined);
@@ -195,32 +202,11 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
   
   const handleApplyComparisonFilters = useCallback(() => {
       setComparisonFilters(pendingComparisonFilters);
-      // After applying, fetch new retailer options based on these filters
-      setIsLoadingOptions(p => ({ ...p, comparisonRetailers: true }));
-      fetchRetailers({
-          provider: pendingComparisonFilters.provider,
-          province: pendingComparisonFilters.province,
-          district: pendingComparisonFilters.district,
-          dsDivision: pendingComparisonFilters.dsDivision
-      }, 'posm')
-      .then(data => {
-          setComparisonRetailerOptions([{ value: 'all', label: 'All Retailers' }, ...data.map(r => ({ value: r.id, label: `${r.id} - ${r.name}` }))]);
-          // Reset selected retailer if not in new list
-          if (!data.some(r => r.id === pendingComparisonFilters.retailerId)) {
-              handlePendingFilterChange('retailerId', 'all', true);
-          }
-      })
-      .finally(() => setIsLoadingOptions(p => ({ ...p, comparisonRetailers: false })));
-
   }, [pendingComparisonFilters]);
 
   const handleResetComparisonFilters = useCallback(() => {
-      const initialCompFilters = { ...initialPosmViewFilters };
-      setPendingComparisonFilters(initialCompFilters);
-      setComparisonFilters(initialCompFilters);
-      fetchRetailers({}, 'posm').then(data => {
-          setComparisonRetailerOptions([{ value: 'all', label: 'All Retailers' }, ...data.map(r => ({ value: r.id, label: `${r.id} - ${r.name}` }))]);
-      });
+      setPendingComparisonFilters(initialPosmViewFilters);
+      setComparisonFilters(initialPosmViewFilters);
   }, []);
 
   const handlePendingFilterChange = useCallback((filterName: keyof PosmGeneralFiltersState, value: any, isComparison: boolean = false) => {
@@ -228,54 +214,102 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
     
     setFilters(prev => {
         const newFilters = { ...prev, [filterName]: value };
-        if (filterName === 'provider') {
-            newFilters.province = 'all'; newFilters.district = 'all';
-            newFilters.dsDivision = 'all'; newFilters.retailerId = 'all';
-        } else if (filterName === 'province') {
+        const level = filterName;
+
+        if (level === 'provider' || (isComparison && level === 'posmChange')) {
+            newFilters.province = 'all'; newFilters.district = 'all'; newFilters.dsDivision = 'all'; newFilters.retailerId = 'all';
+        }
+        if (level === 'province') {
             newFilters.district = 'all'; newFilters.dsDivision = 'all'; newFilters.retailerId = 'all';
-        } else if (filterName === 'district') {
+        }
+        if (level === 'district') {
             newFilters.dsDivision = 'all'; newFilters.retailerId = 'all';
-        } else if (filterName === 'dsDivision') {
+        }
+        if (level === 'dsDivision') {
             newFilters.retailerId = 'all';
+        }
+        if (isComparison) {
+            if (level === 'posmChange' && value !== 'all') {
+                newFilters.province = 'all'; newFilters.district = 'all'; newFilters.dsDivision = 'all';
+            }
+            if (['province', 'district', 'dsDivision'].includes(level) && value !== 'all') {
+                newFilters.posmChange = 'all';
+            }
+            if (level === 'provider') {
+                newFilters.posmChange = 'all';
+            }
         }
         return newFilters;
     });
   }, []);
   
   const currentFilterState = subView === 'comparison' ? pendingComparisonFilters : pendingFilters;
-  const currentContext = subView === 'comparison' ? 'comparison' : 'general';
-
+  
   useEffect(() => {
       const { provider, province, district } = currentFilterState;
-      const commonParams = { provider, salesView: isSalesView, context: 'posm' };
+      const commonParams = { provider, salesView: isSalesView, context: 'posm' as const };
       
       setIsLoadingOptions(p => ({ ...p, provinces: true }));
       fetchProvinces(commonParams.provider, commonParams.salesView, commonParams.context).then(options => setProvinceOptions([{ value: 'all', label: `All ${provinceLabelForFilter}s` }, ...options])).finally(() => setIsLoadingOptions(p => ({ ...p, provinces: false })));
       
       setIsLoadingOptions(p => ({ ...p, districts: true }));
-      fetchDistricts(commonParams.provider, province === 'all' ? undefined : province, commonParams.salesView, commonParams.context).then(options => setDistrictOptions([{ value: 'all', label: `All ${districtLabelForFilter}s` }, ...options])).finally(() => setIsLoadingOptions(p => ({ ...p, districts: false })));
+      fetchDistricts(commonParams.provider, province, commonParams.salesView, commonParams.context).then(options => setDistrictOptions([{ value: 'all', label: `All ${districtLabelForFilter}s` }, ...options])).finally(() => setIsLoadingOptions(p => ({ ...p, districts: false })));
       
       setIsLoadingOptions(p => ({ ...p, dsDivisions: true }));
-      fetchDsDivisions(commonParams.provider, province === 'all' ? undefined : province, district === 'all' ? undefined : district, commonParams.context).then(options => setDsDivisionOptions([{ value: 'all', label: 'All DS Divisions' }, ...options])).finally(() => setIsLoadingOptions(p => ({ ...p, dsDivisions: false })));
+      fetchDsDivisions(commonParams.provider, province, district, commonParams.context).then(options => setDsDivisionOptions([{ value: 'all', label: 'All DS Divisions' }, ...options])).finally(() => setIsLoadingOptions(p => ({ ...p, dsDivisions: false })));
 
-      if (currentContext === 'general') {
+  }, [currentFilterState.provider, currentFilterState.province, currentFilterState.district, isSalesView, provinceLabelForFilter, districtLabelForFilter]);
+
+  useEffect(() => {
+    const fetchGeneralRetailers = async () => {
         setIsLoadingOptions(p => ({ ...p, retailers: true }));
-        fetchRetailers({ provider, province: province === 'all' ? undefined : province, district: district === 'all' ? undefined : district, dsDivision: currentFilterState.dsDivision === 'all' ? undefined : currentFilterState.dsDivision }, 'posm').then(data => setRetailerOptions([{ value: 'all', label: 'All Retailers' }, ...data.map(r => ({ value: r.id, label: `${r.id} - ${r.name}` }))])).finally(() => setIsLoadingOptions(p => ({ ...p, retailers: false })));
-      } else { // On initial load of comparison, fetch all retailers
-        setIsLoadingOptions(p => ({...p, comparisonRetailers: true}));
-        fetchRetailers({}, 'posm').then(data => setComparisonRetailerOptions([{ value: 'all', label: 'All Retailers' }, ...data.map(r => ({ value: r.id, label: `${r.id} - ${r.name}` }))])).finally(() => setIsLoadingOptions(p => ({...p, comparisonRetailers: false})));
-      }
+        try {
+            const data = await fetchRetailers({ ...pendingFilters, salesView: isSalesView }, 'posm');
+            setRetailerOptions([{ value: 'all', label: 'All Retailers' }, ...data.map(r => ({ value: r.id, label: `${r.id} - ${r.name}` }))]);
+        } finally {
+            setIsLoadingOptions(p => ({ ...p, retailers: false }));
+        }
+    };
+    
+    const fetchComparisonRetailers = async () => {
+        setIsLoadingOptions(p => ({ ...p, comparisonRetailers: true }));
+        try {
+            const { provider, posmChange, ...geoFilters } = pendingComparisonFilters;
+            let data: Retailer[];
+            
+            if (provider !== 'all' && (posmChange === 'increase' || posmChange === 'decrease')) {
+                data = await fetchRetailersByPosmChange(provider, posmChange);
+            } else {
+                data = await fetchRetailers({ provider, ...geoFilters }, 'posm');
+            }
+            
+            const newOptions = [{ value: 'all', label: 'All Retailers' }, ...data.map(r => ({ value: r.id, label: `${r.id} - ${r.name}` }))];
+            setComparisonRetailerOptions(newOptions);
+            
+            if (!newOptions.some(opt => opt.value === pendingComparisonFilters.retailerId)) {
+                handlePendingFilterChange('retailerId', 'all', true);
+            }
+        } finally {
+            setIsLoadingOptions(p => ({ ...p, comparisonRetailers: false }));
+        }
+    };
 
-    }, [currentFilterState, isSalesView, provinceLabelForFilter, districtLabelForFilter, currentContext]);
+    if (subView === 'general') {
+        fetchGeneralRetailers();
+    } else if (subView === 'comparison') {
+        fetchComparisonRetailers();
+    }
+}, [subView, pendingFilters, pendingComparisonFilters, isSalesView, handlePendingFilterChange]);
     
     useEffect(() => {
-        const retailerId = pendingComparisonFilters.retailerId;
+        const retailerId = comparisonFilters.retailerId;
         if (subView === 'comparison' && retailerId && retailerId !== 'all') {
-            fetchAvailableBatches(retailerId).then(setAvailableBatches);
+            setIsLoadingOptions(p => ({...p, batches: true}));
+            fetchAvailableBatches(retailerId).then(setAvailableBatches).finally(() => setIsLoadingOptions(p => ({...p, batches: false})));
         } else {
             setAvailableBatches([]);
         }
-    }, [subView, pendingComparisonFilters.retailerId]);
+    }, [subView, comparisonFilters.retailerId]);
 
   useEffect(() => {
     let sidebarContent = null;
@@ -286,7 +320,9 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
                 {pendingFilters.provider !== 'all' && (
                   <>
                     <SelectDropdown label="Provider Status" options={POSM_STATUSES} value={pendingFilters.posmStatus} onChange={(e) => handlePendingFilterChange('posmStatus', e.target.value)} />
-                    <RangeSlider label="Provider Visibility %" min={0} max={100} initialValues={pendingFilters.visibilityRange} onChangeCommitted={(v) => handlePendingFilterChange('visibilityRange', v)} disabled={pendingFilters.provider === 'all'} />
+                    {pendingFilters.posmStatus === 'all' && (
+                        <RangeSlider label="Provider Visibility %" min={0} max={100} initialValues={pendingFilters.visibilityRange} onChangeCommitted={(v) => handlePendingFilterChange('visibilityRange', v)} />
+                    )}
                   </>
                 )}
                 <SelectDropdown label={provinceLabelForFilter} options={provinceOptions} value={pendingFilters.province} onChange={(e) => handlePendingFilterChange('province', e.target.value)} disabled={isLoadingOptions.provinces} />
@@ -296,12 +332,15 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
             </FilterPanel>
         );
     } else if (subView === 'comparison') {
+        const isPosmChangeActive = pendingComparisonFilters.posmChange !== 'all' && pendingComparisonFilters.provider !== 'all';
         sidebarContent = (
             <FilterPanel title="Comparison Filters" onApplyFilters={handleApplyComparisonFilters} onResetFilters={handleResetComparisonFilters}>
-                <SelectDropdown label="Provider" options={PROVIDER_FILTER_OPTIONS} value={pendingComparisonFilters.provider} onChange={(e) => handlePendingFilterChange('provider', e.target.value, true)} disabled={isLoadingOptions.provinces}/>
-                <SelectDropdown label={provinceLabelForFilter} options={provinceOptions} value={pendingComparisonFilters.province} onChange={(e) => handlePendingFilterChange('province', e.target.value, true)} disabled={isLoadingOptions.provinces} />
-                <SelectDropdown label={districtLabelForFilter} options={districtOptions} value={pendingComparisonFilters.district} onChange={(e) => handlePendingFilterChange('district', e.target.value, true)} disabled={isLoadingOptions.districts}/>
-                <SelectDropdown label="DS Division" options={dsDivisionOptions} value={pendingComparisonFilters.dsDivision} onChange={(e) => handlePendingFilterChange('dsDivision', e.target.value, true)} disabled={isLoadingOptions.dsDivisions}/>
+                <SelectDropdown label="Provider" options={PROVIDER_FILTER_OPTIONS} value={pendingComparisonFilters.provider} onChange={(e) => handlePendingFilterChange('provider', e.target.value, true)} />
+                <SelectDropdown label="POSM Change" options={POSM_CHANGE_OPTIONS} value={pendingComparisonFilters.posmChange} onChange={(e) => handlePendingFilterChange('posmChange', e.target.value, true)} disabled={pendingComparisonFilters.provider === 'all'}/>
+                <hr className="my-2 border-gray-300 dark:border-gray-600"/>
+                <SelectDropdown label={provinceLabelForFilter} options={provinceOptions} value={pendingComparisonFilters.province} onChange={(e) => handlePendingFilterChange('province', e.target.value, true)} disabled={isPosmChangeActive || isLoadingOptions.provinces} />
+                <SelectDropdown label={districtLabelForFilter} options={districtOptions} value={pendingComparisonFilters.district} onChange={(e) => handlePendingFilterChange('district', e.target.value, true)} disabled={isPosmChangeActive || isLoadingOptions.districts}/>
+                <SelectDropdown label="DS Division" options={dsDivisionOptions} value={pendingComparisonFilters.dsDivision} onChange={(e) => handlePendingFilterChange('dsDivision', e.target.value, true)} disabled={isPosmChangeActive || isLoadingOptions.dsDivisions}/>
                 <hr className="my-2 border-gray-300 dark:border-gray-600"/>
                 <SelectDropdown label="Retailer Name/ID" options={comparisonRetailerOptions} value={pendingComparisonFilters.retailerId} onChange={(e) => handlePendingFilterChange('retailerId', e.target.value, true)} disabled={isLoadingOptions.comparisonRetailers} />
             </FilterPanel>
@@ -315,11 +354,10 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
     pendingComparisonFilters, handleApplyComparisonFilters, handleResetComparisonFilters, comparisonRetailerOptions,
     provinceOptions, districtOptions, dsDivisionOptions, retailerOptions, 
     isLoadingOptions, provinceLabelForFilter, districtLabelForFilter
-]);
-
+  ]);
 
   const renderSubViewContent = () => {
-    if (isLoading) return <LoadingSpinner message="Loading POSM data..." />;
+    if (isLoading && subView === 'general') return <LoadingSpinner message="Loading POSM data..." />;
     if (error) return <ErrorMessage message={error} />;
 
     switch (subView) {
@@ -380,6 +418,7 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
                 retailerOptions={comparisonRetailerOptions}
                 selectedRetailerId={comparisonFilters.retailerId}
                 batchOptions={availableBatches}
+                isLoadingBatches={!!isLoadingOptions.batches}
             /> 
         );
       default: return null;

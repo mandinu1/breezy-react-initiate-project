@@ -1,4 +1,3 @@
-// mandinu1/breezy-react-initiate-project/breezy-react-initiate-project-0fa4c536d6929256228f28fa08a2914fae3eabac/frontend-retail-dashboard/services/api.ts
 import axios from 'axios';
 import { API_BASE_URL } from '../constants';
 import {
@@ -99,7 +98,6 @@ export const fetchRetailers = async (filters: any, context: 'board' | 'posm' = '
     console.log(`Fetching retailers with filters (LIVE) for ${context}:`, filters);
     try {
         const queryParams: any = { ...filters, context };
-        // boardType is already part of 'filters' if passed from BoardView
         const response = await apiClient.get('/retailers', { params: queryParams });
         return response.data;
     } catch (error) {
@@ -108,8 +106,19 @@ export const fetchRetailers = async (filters: any, context: 'board' | 'posm' = '
     }
 };
 
-// ... (rest of the API service file remains the same as provided in the previous step)
-const mockDelay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+export const fetchRetailersByPosmChange = async (provider: string, changeStatus: 'increase' | 'decrease'): Promise<Retailer[]> => {
+    console.log(`Fetching retailers by POSM change: provider=${provider}, status=${changeStatus}`);
+    try {
+        const response = await apiClient.get('/posm/retailers-by-change', {
+            params: { provider, changeStatus }
+        });
+        return response.data;
+    } catch (error) {
+        console.error("Failed to fetch retailers by POSM change:", error);
+        return [];
+    }
+};
+
 
 export const fetchPosmComparisonData = async (profileId: string, batch1Id: string, batch2Id: string): Promise<PosmComparisonData> => {
   console.log('Fetching POSM comparison for profile (LIVE):', profileId, 'batches:', batch1Id, batch2Id);

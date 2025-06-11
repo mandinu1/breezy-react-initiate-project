@@ -6,10 +6,11 @@ import numpy as np
 
 from app.models import (
     FetchPosmGeneralResponse, PosmGeneralFiltersState, PosmData, ProviderMetric,
-    PosmComparisonData, PosmBatchDetails, PosmBatchShare, FilterOption
+    PosmComparisonData, PosmBatchDetails, PosmBatchShare, FilterOption, Retailer
 )
-from app.dependencies import get_posm_df
+from app.dependencies import get_posm_df, get_boards_df
 from app.data_loader import filter_by_max_capture_phase
+from .options import get_provider_name_from_value_options
 
 router = APIRouter()
 
@@ -31,7 +32,7 @@ def to_numeric_or_default(value, default=0.0):
     return default if pd.isna(num) else num
 
 def safe_str_convert_posm_router(value) -> Optional[str]:
-    if pd.isna(value):
+    if pd.isna(value) or value is None:
         return None
     return str(value)
 
@@ -86,7 +87,6 @@ async def fetch_posm_general_api(
             df = pd.DataFrame(columns=df.columns)
         if df.empty: return FetchPosmGeneralResponse(data=[], count=0, providerMetrics=[])
 
-        # --- CORRECTED LOGIC FOR VISIBILITY SLIDER ---
         if filters.visibilityRange and isinstance(filters.visibilityRange, str):
             try:
                 min_val_str, max_val_str = filters.visibilityRange.split(',')
@@ -100,11 +100,9 @@ async def fetch_posm_general_api(
                         (provider_percentages <= max_vis)
                     ]
             except (ValueError, IndexError):
-                # If parsing fails, ignore the filter.
                 pass
         if df.empty: return FetchPosmGeneralResponse(data=[], count=0, providerMetrics=[])
         
-        # Apply status filter (Dominant/Not Dominant)
         if filters.posmStatus and filters.posmStatus != 'all':
             percentage_cols = [f"{p_name.upper()}_AREA_PERCENTAGE" for p_name in PROVIDER_NAMES_FOR_COMPARISON]
             
@@ -116,9 +114,9 @@ async def fetch_posm_general_api(
 
             df['max_provider_col'] = df[percentage_cols].idxmax(axis=1)
 
-            if filters.posmStatus == 'increase': # Dominant
+            if filters.posmStatus == 'increase':
                 df = df[df['max_provider_col'] == provider_col_filter]
-            elif filters.posmStatus == 'decrease': # Not Dominant
+            elif filters.posmStatus == 'decrease':
                 df = df[df['max_provider_col'] != provider_col_filter]
 
             if df.empty: return FetchPosmGeneralResponse(data=[], count=0, providerMetrics=[])
@@ -181,6 +179,73 @@ async def fetch_posm_general_api(
         providerMetrics=provider_metrics_list
     )
 
+@router.get("/posm/retailers-by-change", response_model=List[Retailer])
+async def get_retailers_by_posm_change(
+    provider: str = Query(...),
+    change_status: str = Query(..., alias="changeStatus"),
+    posm_df: pd.DataFrame = Depends(get_posm_df),
+    board_df: pd.DataFrame = Depends(get_boards_df)
+):
+    if posm_df.empty or provider == 'all' or change_status not in ['increase', 'decrease']:
+        return []
+
+    provider_name = get_provider_name_from_value_options(provider)
+    if not provider_name:
+        return []
+    
+    provider_col = f"{provider_name.upper()}_AREA_PERCENTAGE"
+    if provider_col not in posm_df.columns:
+        return []
+
+    df = posm_df[['PROFILE_ID', 'CAPTURE_PHASE', provider_col]].copy()
+    df['PROFILE_ID'] = df['PROFILE_ID'].astype(str)
+    df[provider_col] = pd.to_numeric(df[provider_col], errors='coerce').fillna(0)
+    df['CAPTURE_PHASE'] = pd.to_numeric(df['CAPTURE_PHASE'], errors='coerce')
+    df.dropna(subset=['CAPTURE_PHASE'], inplace=True)
+    df.sort_values(by=['PROFILE_ID', 'CAPTURE_PHASE'], ascending=[True, False], inplace=True)
+    
+    retailer_batch_counts = df.groupby('PROFILE_ID')['CAPTURE_PHASE'].nunique()
+    retailers_with_multiple_batches = retailer_batch_counts[retailer_batch_counts >= 2].index
+    
+    df_multi_batch = df[df['PROFILE_ID'].isin(retailers_with_multiple_batches)]
+    if df_multi_batch.empty:
+        return []
+
+    latest_two_batches = df_multi_batch.groupby('PROFILE_ID').head(2)
+    latest_batch = latest_two_batches.groupby('PROFILE_ID').first()
+    previous_batch = latest_two_batches.groupby('PROFILE_ID').last()
+
+    comparison_df = pd.merge(latest_batch, previous_batch, on='PROFILE_ID', suffixes=('_latest', '_previous'))
+    comparison_df = comparison_df[comparison_df['CAPTURE_PHASE_latest'] != comparison_df['CAPTURE_PHASE_previous']]
+    if comparison_df.empty:
+        return []
+
+    comparison_df['change'] = comparison_df[f"{provider_col}_latest"] - comparison_df[f"{provider_col}_previous"]
+
+    if change_status == 'increase':
+        changed_retailer_ids = comparison_df[comparison_df['change'] > 0].index.tolist()
+    elif change_status == 'decrease':
+        changed_retailer_ids = comparison_df[comparison_df['change'] < 0].index.tolist()
+    else:
+        changed_retailer_ids = []
+
+    if not changed_retailer_ids:
+        return []
+
+    retailer_info_df = board_df[board_df['PROFILE_ID'].astype(str).isin(changed_retailer_ids)].drop_duplicates(subset=['PROFILE_ID'])
+    if retailer_info_df.empty:
+        return []
+
+    return [
+        Retailer(
+            id=str(row['PROFILE_ID']),
+            name=str(row.get('PROFILE_NAME', 'N/A')),
+            latitude=float(row['LATITUDE']),
+            longitude=float(row['LONGITUDE']),
+        ) for _, row in retailer_info_df.iterrows()
+    ]
+
+
 @router.get("/posm/comparison", response_model=PosmComparisonData)
 async def fetch_posm_comparison_data_api(
     profileId: str = Query(...),
@@ -200,7 +265,6 @@ async def fetch_posm_comparison_data_api(
         if batch_df.empty:
             return PosmBatchDetails(image="/assets/sample-retailer-placeholder.png", shares=[], maxCapturePhase=batch_id)
 
-        # Get the first entry for this batch
         batch_entry = batch_df.iloc[0]
         shares = []
         for provider_name in PROVIDER_NAMES_FOR_COMPARISON:
@@ -219,7 +283,6 @@ async def fetch_posm_comparison_data_api(
     batch1_details = get_batch_details(batch1Id)
     batch2_details = get_batch_details(batch2Id)
     
-    # Calculate differences
     diffs = []
     for provider_name in PROVIDER_NAMES_FOR_COMPARISON:
         share1 = next((s.percentage for s in batch1_details.shares if s.provider == provider_name), 0)
@@ -232,6 +295,7 @@ async def fetch_posm_comparison_data_api(
         differences=diffs
     )
 
+
 @router.get("/posm/available-batches/{profile_id}", response_model=List[FilterOption])
 async def fetch_available_batches_for_profile(profile_id: str, posm_df: pd.DataFrame = Depends(get_posm_df)):
     if posm_df.empty or 'PROFILE_ID' not in posm_df.columns:
@@ -243,7 +307,9 @@ async def fetch_available_batches_for_profile(profile_id: str, posm_df: pd.DataF
         
     unique_phases = df_profile['CAPTURE_PHASE'].dropna().unique()
     
-    # Sorting assuming phases are numeric or can be string-sorted chronologically
-    sorted_phases = sorted(unique_phases, key=lambda x: str(x))
+    try:
+        sorted_phases = sorted(unique_phases, key=lambda x: int(float(x)))
+    except (ValueError, TypeError):
+        sorted_phases = sorted(unique_phases, key=lambda x: str(x))
     
     return [FilterOption(value=str(phase), label=f"Batch {phase}") for phase in sorted_phases]
