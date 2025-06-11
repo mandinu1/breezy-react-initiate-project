@@ -6,9 +6,9 @@ interface ManagementViewProps {
 
 const ManagementView: React.FC<ManagementViewProps> = ({ setSidebarFilters }) => {
   const tableauDashboards = [
-    { name: 'Overall Performance Dashboard', url: 'https://tableau.example.com/dashboards/overall' },
-    { name: 'Sales Region Analysis', url: 'https://tableau.example.com/dashboards/sales-regions' },
-    { name: 'Provider Share Trends', url: 'https://tableau.example.com/dashboards/provider-share' },
+    { name: 'Dialog Management Dashboard', url: 'https://tableau.example.com/dashboards/overall' },
+    { name: 'Airtel Management Dashboard', url: 'https://tableau.example.com/dashboards/sales-regions' },
+    
   ];
 
   useEffect(() => {
