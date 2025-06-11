@@ -1,3 +1,4 @@
+// frontend-retail-dashboard/pages/PosmView.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { ViewMode, PosmGeneralFiltersState, PosmData, ProviderMetric, Retailer, FilterOption, GeoJsonCollection } from '../types';
 import FilterPanel from '../components/sidebar/FilterPanel';
@@ -188,6 +189,32 @@ const PosmView: React.FC<PosmViewProps> = ({ viewMode, setSidebarFilters }) => {
     fetchData(initialPosmViewFilters);
     fetchTotalRetailerCountForPosm();
   }, [fetchData, fetchTotalRetailerCountForPosm]);
+  
+  // =================================================================
+  // == ADDED CODE: Reset state when switching between sub-views =====
+  // =================================================================
+  useEffect(() => {
+    // When the sub-view changes, reset the filters and data for the
+    // view we are navigating TO, ensuring it's always fresh.
+    if (subView === 'general') {
+      setPendingFilters(initialPosmViewFilters);
+      setActiveFilters(initialPosmViewFilters);
+      setSelectedOriginalImageId(undefined);
+      setSelectedDetectedImageId(undefined);
+      // Refetch the initial data for the general view
+      fetchData(initialPosmViewFilters);
+    } else if (subView === 'comparison') {
+      // Reset filters for the comparison view
+      setPendingComparisonFilters(initialPosmViewFilters);
+      setComparisonFilters(initialPosmViewFilters);
+    } else if (subView === 'district') {
+      // The district view fetches its own data, but we can trigger it here if needed
+      fetchData(initialPosmViewFilters); // Assuming it needs a trigger
+    }
+  }, [subView, fetchData]);
+  // =================================================================
+  // == END OF ADDED CODE ============================================
+  // =================================================================
 
   const handleApplyGeneralFilters = useCallback(() => {
     setActiveFilters(pendingFilters);
