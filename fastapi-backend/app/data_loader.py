@@ -24,9 +24,18 @@ def load_dataframes():
     
     if _posm_df is None:
         try:
-            _posm_df = pd.read_csv(POSM_CSV)
-            _posm_df['FETCHED_DATE'] = pd.to_datetime(_posm_df['FETCHED_DATE'], errors='coerce')
-            _posm_df['RECEIVED_DATE'] = pd.to_datetime(_posm_df['RECEIVED_DATE'], errors='coerce')
+            if _posm_df is None:
+                _posm_df = pd.read_csv(POSM_CSV)
+                _posm_df.columns = _posm_df.columns.str.strip()
+                
+                # --- FIX: Specify the exact format for the date/time columns ---
+                # This format string tells pandas to expect Minutes:Seconds.Microseconds
+                time_format = "%M:%S.%f"
+
+                # Apply the conversion with the specified format
+                _posm_df['FETCHED_DATE'] = pd.to_datetime(_posm_df['FETCHED_DATE'], format=time_format, errors='coerce')
+                _posm_df['RECEIVED_DATE'] = pd.to_datetime(_posm_df['RECEIVED_DATE'], format=time_format, errors='coerce')
+            
         except FileNotFoundError:
             print(f"Error: {POSM_CSV} not found.")
             _posm_df = pd.DataFrame()
@@ -42,10 +51,8 @@ def get_posm_data():
     _, df = load_dataframes()
     return df
 
-# --- Adapting logic from host (4).py's load_and_prepare_data ---
-# This function would be more complex, applying filters and column drops
-# For simplicity in this example, it's basic, but in a real app,
-# you'd replicate the CAPTURE_PHASE filtering and column selections.
+
+
 
 def filter_by_max_capture_phase(df: pd.DataFrame, df_name_for_log=""):
     if df is None or df.empty:

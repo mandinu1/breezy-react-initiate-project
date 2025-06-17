@@ -5,14 +5,14 @@ import numpy as np
 
 from app.models import Retailer
 from app.dependencies import get_boards_df, get_posm_df
-# Assuming filter_df_by_board_type is now in options.py or a shared utils
+
 from app.routers.options import filter_df_by_board_type, PROVIDERS_CONFIG_OPTIONS_INTERNAL as RETAILER_PROVIDERS_CONFIG # Use a consistent provider config
 
 router = APIRouter()
 
 # (get_provider_name_from_value_for_retailers_r can use the imported RETAILER_PROVIDERS_CONFIG)
 def get_provider_name_from_value_for_retailers_r(value: str) -> Optional[str]:
-    for p_config in RETAILER_PROVIDERS_CONFIG: # Use imported config
+    for p_config in RETAILER_PROVIDERS_CONFIG: 
         if p_config["value"] == value:
             return p_config["name"]
     return None
